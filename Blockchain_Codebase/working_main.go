@@ -2,9 +2,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,6 +13,7 @@ import (
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/gin-gonic/gin"
 )
 
 const (
@@ -28,53 +27,57 @@ var (
 	server  bool
 )
 
+// Middleware to allow CORS
+func CORSMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+		c.Next()
+	}
+}
+
+// Initialize CLI flags
 func init() {
-	// Define CLI flags
 	flag.StringVar(&port, "port", "8080", "Port number to run the server")
 	flag.BoolVar(&process, "process", false, "Process containers and add to blockchain")
 	flag.BoolVar(&server, "server", false, "Run REST API server for inspecting containers")
 	flag.Parse()
 
-	// Initialize sharding system
-	initShards()
+	initShards() // Ensure sharding system is initialized
 }
 
 // Process running Docker containers and add them to the blockchain
 func processContainers(cli *client.Client) {
 	containers, err := cli.ContainerList(context.Background(), types.ContainerListOptions{All: true})
 	if err != nil {
-		log.Fatalf("Error listing containers: %v", err)
+		log.Fatalf("❌ Error listing containers: %v", err)
 	}
 
-	fmt.Println("Running Docker Containers:")
-	for _, container := range containers {
-		fmt.Printf("Container ID: %s\nImage: %s\nState: %s\nStatus: %s\n",
-			container.ID, container.Image, container.State, container.Status)
-		fmt.Println("----------------------------------------------------")
+	if len(containers) == 0 {
+		log.Println("⚠️ No active containers found.")
+		return
 	}
 
+	log.Println("📦 Processing running Docker Containers...")
 	var wg sync.WaitGroup
-	action := func(containerID string) {
-		log.Printf("Processing container: %s", containerID)
-		addBlock(containerID)
-		containerInfo, err := cli.ContainerInspect(context.Background(), containerID)
-		if err != nil {
-			log.Printf("Error inspecting container %s: %v", containerID, err)
-			return
-		}
-		log.Printf("Container %s status: %s", containerID, containerInfo.State.Status)
-	}
 
 	for _, container := range containers {
 		wg.Add(1)
 		go func(containerID string) {
 			defer wg.Done()
-			action(containerID)
+			log.Printf("🛠️ Processing container: %s", containerID)
+			addBlock(containerID)
 		}(container.ID)
 	}
 
 	wg.Wait()
-	log.Println("Finished processing all containers.")
+	log.Println("✅ Finished processing all containers.")
 
 	// Display Blockchain and Shard Distribution
 	displayBlockchain()
@@ -83,110 +86,27 @@ func processContainers(cli *client.Client) {
 
 // Start the REST API server
 func runAPIServer(cli *client.Client) {
-	mux := http.NewServeMux()
+	r := gin.Default()
+	r.Use(CORSMiddleware()) // Enable CORS
 
-	// Fetch Blockchain
-	mux.HandleFunc("/blockchain", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Blockchain)
-	})
+	// API Endpoints
+	r.GET("/blockchain", getBlockchain)
+	r.GET("/blockchain/shard", getShardBlockchain)
+	r.POST("/addBlock", addBlockHandler)
+	r.GET("/conflicts", getConflicts)
+	r.DELETE("/removeLastBlock", removeLastBlock)
 
-	// Fetch Blockchain Per Shard
-	mux.HandleFunc("/blockchain/shard", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, `{"error": "Invalid request method"}`, http.StatusMethodNotAllowed)
-			return
-		}
+	// Start Server
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: r,
+	}
 
-		shardID := r.URL.Query().Get("shardID")
-		if shardID == "" {
-			http.Error(w, `{"error": "Missing shard ID"}`, http.StatusBadRequest)
-			return
-		}
-
-		shardNum, err := strconv.Atoi(shardID)
-		if err != nil || shardNum < 0 || shardNum >= NumShards {
-			http.Error(w, `{"error": "Invalid shard ID"}`, http.StatusBadRequest)
-			return
-		}
-
-		shardBlocks := getShardBlocks(shardNum)
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(shardBlocks)
-	})
-
-	// Add a Block
-	mux.HandleFunc("/addBlock", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, `{"error": "Invalid request method"}`, http.StatusMethodNotAllowed)
-			return
-		}
-
-		var reqBody struct {
-			ContainerID string `json:"containerID"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-			http.Error(w, `{"error": "Invalid JSON body"}`, http.StatusBadRequest)
-			return
-		}
-
-		if reqBody.ContainerID == "" {
-			http.Error(w, `{"error": "Missing container ID"}`, http.StatusBadRequest)
-			return
-		}
-
-		addBlock(reqBody.ContainerID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Block added successfully"})
-	})
-
-	// View Conflicts
-	mux.HandleFunc("/conflicts", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, `{"error": "Invalid request method"}`, http.StatusMethodNotAllowed)
-			return
-		}
-
-		conflictsMu.Lock()
-		defer conflictsMu.Unlock()
-
-		log.Printf("Fetching concurrency conflicts. Total: %d", len(concurrencyConflicts))
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"total_conflicts": len(concurrencyConflicts),
-			"conflicts":       concurrencyConflicts,
-		})
-	})
-
-	// Remove Last Block
-	mux.HandleFunc("/removeLastBlock", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodDelete {
-			http.Error(w, `{"error": "Invalid request method"}`, http.StatusMethodNotAllowed)
-			return
-		}
-
-		if len(Blockchain) == 0 {
-			http.Error(w, `{"error": "Blockchain is empty, no blocks to remove"}`, http.StatusBadRequest)
-			return
-		}
-
-		BlockchainMu.Lock()
-		Blockchain = Blockchain[:len(Blockchain)-1]
-		BlockchainMu.Unlock()
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{"message": "Last block removed successfully"})
-	})
-
-	server := &http.Server{Addr: ":" + port, Handler: mux}
-
-	// Start the server in a goroutine
+	// Start server in a goroutine
 	go func() {
-		log.Printf("Starting REST API server on port %s...", port)
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Error starting REST API server: %v", err)
+		log.Printf("🚀 Starting REST API server on port %s...", port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("❌ Error starting REST API server: %v", err)
 		}
 	}()
 
@@ -195,26 +115,122 @@ func runAPIServer(cli *client.Client) {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	log.Println("Shutting down REST API server...")
-	if err := server.Shutdown(context.Background()); err != nil {
-		log.Fatalf("Error shutting down server: %v", err)
+	log.Println("🛑 Shutting down REST API server...")
+	if err := srv.Shutdown(context.Background()); err != nil {
+		log.Fatalf("❌ Error shutting down server: %v", err)
 	}
-	log.Println("Server shutdown complete.")
+	log.Println("✅ Server shutdown complete.")
+}
+
+// Get entire blockchain
+func getBlockchain(c *gin.Context) {
+	c.JSON(http.StatusOK, Blockchain)
+}
+
+// Get blockchain data for a specific shard
+func getShardBlockchain(c *gin.Context) {
+	shardID := c.Query("shardID")
+	if shardID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing shard ID"})
+		return
+	}
+
+	shardNum, err := strconv.Atoi(shardID)
+	if err != nil || shardNum < 0 || shardNum >= NumShards {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid shard ID"})
+		return
+	}
+
+	c.JSON(http.StatusOK, getShardBlocks(shardNum))
+}
+
+// Add a new block to the blockchain
+func addBlockHandler(c *gin.Context) {
+	var reqBody struct {
+		ContainerID string `json:"containerID"`
+	}
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+
+	if reqBody.ContainerID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing container ID"})
+		return
+	}
+
+	addBlock(reqBody.ContainerID)
+	c.JSON(http.StatusCreated, gin.H{"message": "Block added successfully"})
+}
+
+// Fetch concurrency conflicts
+func getConflicts(c *gin.Context) {
+	conflictsMu.Lock()
+	defer conflictsMu.Unlock()
+
+	log.Printf("🔍 Fetching concurrency conflicts. Total: %d", len(concurrencyConflicts))
+	c.JSON(http.StatusOK, gin.H{
+		"total_conflicts": len(concurrencyConflicts),
+		"conflicts":       concurrencyConflicts,
+	})
+}
+
+// Remove the last block from the blockchain
+func removeLastBlock(c *gin.Context) {
+	if len(Blockchain) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Blockchain is empty, no blocks to remove"})
+		return
+	}
+
+	BlockchainMu.Lock()
+	Blockchain = Blockchain[:len(Blockchain)-1]
+	BlockchainMu.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{"message": "Last block removed successfully"})
+}
+
+// Check if Docker is available
+func checkDockerConnection(cli *client.Client) bool {
+	_, err := cli.Ping(context.Background())
+	if err != nil {
+		log.Printf("⚠️ Docker connection failed: %v", err)
+		return false
+	}
+	log.Println("✅ Docker connection successful")
+	return true
 }
 
 func main() {
+	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
-		log.Fatalf("Error creating Docker client: %v", err)
+		log.Fatalf("❌ Error creating Docker client: %v", err)
 	}
+	defer cli.Close()
+
+	// Check if Docker is running
+	if !checkDockerConnection(cli) {
+		log.Fatal("❌ Docker is not running. Please start Docker and try again.")
+	}
+
+	// Handle OS signals for graceful shutdown
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
 	// Process containers if `--process` flag is passed
 	if process {
+		log.Println("📦 Processing containers...")
 		processContainers(cli)
 	}
 
 	// Start REST API server if `--server` flag is passed
 	if server {
-		runAPIServer(cli)
+		go runAPIServer(cli) // Run API server in a separate goroutine
 	}
+
+	// Wait for termination signal
+	<-quit
+	log.Println("🛑 Shutting down gracefully...")
+
+	log.Println("✅ Server stopped successfully.")
 }
