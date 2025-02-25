@@ -1,102 +1,118 @@
 'use client';
 
 import React, { useState, useEffect } from "react";
-import ReactFlow, { MiniMap, Controls, Background } from 'reactflow';
-import 'reactflow/dist/style.css';
+import ReactFlow, { MiniMap, Controls, Background } from "reactflow";
+import "reactflow/dist/style.css";
 
 const API_BASE = "http://localhost:8080"; // Ensure this matches your backend
 
-export default function BlockchainSharding() {
+export default function SpiderWebView() {
   const [nodes, setNodes] = useState([]);
   const [edges, setEdges] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [selectedBlock, setSelectedBlock] = useState(null);
+  const [currentShard, setCurrentShard] = useState(null);
 
   useEffect(() => {
     fetchBlockchain();
   }, []);
 
   const fetchBlockchain = async () => {
-    setLoading(true);
-    setError("");
-
     try {
       const response = await fetch(`${API_BASE}/blockchain`);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
       const data = await response.json();
-      formatGraphData(data);
+      formatSpiderWebData(data);
     } catch (err) {
       console.error("Error fetching blockchain data:", err);
-      setError("Failed to fetch blockchain data. Ensure backend is running.");
-    } finally {
-      setLoading(false);
     }
   };
 
-  const formatGraphData = (blocks) => {
+  const formatSpiderWebData = (blocks) => {
     let newNodes = [];
     let newEdges = [];
 
-    const shardColors = ["#FF5733", "#33FF57", "#3385FF", "#FF33A8", "#FFD700"];
-
-    blocks.forEach((block, index) => {
-      newNodes.push({
-        id: block.index.toString(),
-        data: {
-          label: `Block ${block.index}`,
-          hash: block.hash.slice(0, 6),
-        },
-        position: { x: block.index * 100, y: block.shard_id * 150 },
-        style: {
-          background: shardColors[block.shard_id % shardColors.length],
-          color: "#fff",
-          padding: 10,
-          borderRadius: 10,
-        },
-      });
-
-      if (block.index > 0) {
-        newEdges.push({
-          id: `e${block.index}`,
-          source: (block.index - 1).toString(),
-          target: block.index.toString(),
-          animated: true,
-          style: { strokeWidth: 2, stroke: "#ccc" },
-        });
+    // Organize blocks by shard
+    let shardMap = {};
+    blocks.forEach((block) => {
+      if (!shardMap[block.shard_id]) {
+        shardMap[block.shard_id] = [];
       }
+      shardMap[block.shard_id].push(block);
+    });
+
+    let shardSpacing = 400; // Distance between shards
+    let centerX = 400; // X coordinate for centering
+    let centerY = 300; // Y coordinate for centering
+
+    Object.entries(shardMap).forEach(([shardId, shardBlocks], index) => {
+      let angleStep = (2 * Math.PI) / shardBlocks.length;
+      let radius = 150 + shardBlocks.length * 10; // Distance from the center
+
+      shardBlocks.forEach((block, i) => {
+        let x = centerX + Math.cos(angleStep * i) * radius + index * shardSpacing;
+        let y = centerY + Math.sin(angleStep * i) * radius;
+
+        newNodes.push({
+          id: block.index.toString(),
+          data: { label: `Block ${block.index}`, ...block },
+          position: { x, y },
+          style: {
+            background: shardId % 2 === 0 ? "#FF5733" : "#33FF57",
+            color: "#fff",
+            borderRadius: "5px",
+            padding: "10px",
+            cursor: "pointer",
+          },
+          draggable: true,
+        });
+
+        if (block.previous_hash !== "0") {
+          newEdges.push({
+            id: `e${block.index}`,
+            source: (block.index - 1).toString(),
+            target: block.index.toString(),
+            animated: true,
+            style: { stroke: "#999" },
+          });
+        }
+      });
     });
 
     setNodes(newNodes);
     setEdges(newEdges);
   };
 
-  return (
-    <div style={{ width: "100%", height: "80vh" }}>
-      <h1 className="text-3xl font-bold text-center mb-6">
-        Blockchain Sharding Visualisation
-      </h1>
+  const handleNodeClick = (event, node) => {
+    setSelectedBlock(node.data);
+  };
 
-      <button
-        onClick={fetchBlockchain}
-        className="bg-blue-500 text-white p-2 rounded mb-4"
-      >
-        {loading ? "Loading..." : "Refresh"}
+  return (
+    <div className="w-screen h-screen flex flex-col items-center bg-black text-white">
+      <h1 className="text-3xl font-bold text-center mt-4">Spider-Web Blockchain View</h1>
+
+      <button onClick={fetchBlockchain} className="mt-2 px-4 py-2 bg-blue-600 text-white rounded">
+        Refresh
       </button>
 
-      {error && <p className="text-red-500 text-center">{error}</p>}
+      {/* Fullscreen Spider-Web Visualization */}
+      <div className="w-full h-full relative">
+        <ReactFlow nodes={nodes} edges={edges} onNodeClick={handleNodeClick}>
+          <MiniMap />
+          <Controls />
+          <Background />
+        </ReactFlow>
 
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        panOnScroll
-        zoomOnScroll
-        elementsSelectable
-      >
-        <MiniMap nodeStrokeWidth={3} />
-        <Controls />
-        <Background color="#aaa" gap={16} />
-      </ReactFlow>
+        {/* Floating Block Details Box - Top Left */}
+        {selectedBlock && (
+          <div className="absolute top-4 left-4 bg-gray-800 text-white p-4 rounded shadow-lg w-72">
+            <h2 className="text-lg font-bold">Block #{selectedBlock.index}</h2>
+            <p><strong>Hash:</strong> {selectedBlock.hash.slice(0, 10)}...</p>
+            <p><strong>Shard ID:</strong> {selectedBlock.shard_id}</p>
+            <p><strong>Previous Hash:</strong> {selectedBlock.previous_hash.slice(0, 10)}...</p>
+            <p><strong>Transactions:</strong> {selectedBlock.transactions.length}</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
