@@ -2,7 +2,7 @@ Blockchain Concurrency Confliction Resolution
 
 Go-Based backend code, paired with a Python front-end
 
-📌 Project Overview
+Project Overview
 
 This project is a blockchain-based concurrency conflict resolution system designed to handle transaction conflicts efficiently. It integrates a Go-based backend for high-performance blockchain processing and a Python-based front-end for user interaction and visualization.
 
@@ -24,7 +24,7 @@ Blockchain-Concurrency-Confliction-Resolution/
 │── org2-ca.crt                 # Certificate for Org2 peer node
 └── README.md                   # Documentation (this file)
 
-🚀 Features
+Features
 
 ✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions.
 ✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms.
@@ -33,7 +33,7 @@ Blockchain-Concurrency-Confliction-Resolution/
 ✅ Python GUI: Simple GUI for managing and testing transactions.
 ✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states.
 
-🛠 Installation & Setup
+> **Installation & Setup**
 
 🔹 Prerequisites
 Ensure you have the following installed on your system:
@@ -68,17 +68,17 @@ cd Blockchain_Codebase/blockchain-visualizer
 npm install
 npm run dev
 
-📷 Screenshots
+> **Screenshots**
 
 (Include images of the system, architecture, or UI here)
 
-📜 Contributors
-👤 ConnorM2020 (Connor)
+> **Contributors**
+ConnorM2020 
 
-🏛 License
+License
 
 This project is licensed under the MIT License. Feel free to modify and use it in your projects.
-📬 Contact & Support
+Contact & Support
 
 For issues and contributions, create a GitHub issue or reach out via: 
 GitHub: ConnorM2020
