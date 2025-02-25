@@ -50,6 +50,7 @@ WSL2 (if running on Windows)
 🔹 Cloning the Repository
 
 git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution.git
+
 cd Blockchain-Concurrency-Confliction-Resolution
 
 🔹 Running the Blockchain Network
