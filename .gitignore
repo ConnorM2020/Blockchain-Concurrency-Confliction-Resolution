@@ -1,0 +1,38 @@
+# Ignore certificate files
+*.crt
+
+# Ignore chaincode directory
+chaincode/
+
+# Ignore Hyperledger Fabric samples directory
+fabric-samples/
+
+# Ignore private keys and configuration files
+*.key
+*.pem
+*.json.save
+fablo-config.json
+connection-profile.yaml
+
+# Ignore backup and temporary files
+backup/
+*.bak
+*.swp
+*.swo
+
+# Ignore Go dependencies and build artifacts
+vendor/
+bin/
+*.exe
+*.out
+
+# Ignore Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore IDE and editor files
+.vscode/
+.idea/
+*.log
+.DS_Store
