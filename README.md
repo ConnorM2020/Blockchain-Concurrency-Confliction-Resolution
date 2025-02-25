@@ -26,12 +26,16 @@ Blockchain-Concurrency-Confliction-Resolution/
 
 🚀 Features
 
-✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions.✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms.✅ ReactFlow-Based Visualization: Provides an interactive blockchain visualization using ReactFlow.✅ Hyperledger Fabric Integration: Uses chaincode for executing business logic on a private blockchain network.✅ Python GUI: Simple GUI for managing and testing transactions.✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states.
+✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions.
+✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms.
+✅ ReactFlow-Based Visualization: Provides an interactive blockchain visualization using ReactFlow.
+✅ Hyperledger Fabric Integration: Uses chaincode for executing business logic on a private blockchain network.
+✅ Python GUI: Simple GUI for managing and testing transactions.
+✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states.
 
 🛠 Installation & Setup
 
 🔹 Prerequisites
-
 Ensure you have the following installed on your system:
 
 Go (>=1.23.2)
@@ -43,7 +47,6 @@ Python (for GUI interaction)
 Docker & Fabric Tools (for Hyperledger Fabric)
 
 WSL2 (if running on Windows)
-
 🔹 Cloning the Repository
 
 git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution.git
@@ -70,15 +73,12 @@ npm run dev
 (Include images of the system, architecture, or UI here)
 
 📜 Contributors
-
-👤 ConnorM2020 (Connor)👤 cmallon42
+👤 ConnorM2020 (Connor)
 
 🏛 License
 
 This project is licensed under the MIT License. Feel free to modify and use it in your projects.
-
 📬 Contact & Support
 
-For issues and contributions, create a GitHub issue or reach out via:🔗 GitHub: ConnorM2020
-
-wd
+For issues and contributions, create a GitHub issue or reach out via: 
+GitHub: ConnorM2020
