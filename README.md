@@ -2,11 +2,11 @@ Blockchain Concurrency Confliction Resolution
 
 Go-Based backend code, paired with a Python front-end
 
-Project Overview
+> Project Overview
 
 This project is a blockchain-based concurrency conflict resolution system designed to handle transaction conflicts efficiently. It integrates a Go-based backend for high-performance blockchain processing and a Python-based front-end for user interaction and visualization.
 
-🏗 Project Structure
+> Project Structure
 
 Blockchain-Concurrency-Confliction-Resolution/
 │── Blockchain_Codebase/      # Go-based blockchain implementation
