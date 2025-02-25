@@ -26,12 +26,12 @@ Blockchain-Concurrency-Confliction-Resolution/
 
 Features
 
-✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions.
-✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms.
-✅ ReactFlow-Based Visualization: Provides an interactive blockchain visualization using ReactFlow.
-✅ Hyperledger Fabric Integration: Uses chaincode for executing business logic on a private blockchain network.
-✅ Python GUI: Simple GUI for managing and testing transactions.
-✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states.
+✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions. \n
+✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms. \n
+✅ ReactFlow-Based Visualization: Provides an interactive blockchain visualization using ReactFlow. "\n"
+✅ Hyperledger Fabric Integration: Uses chaincode for executing business logic on a private blockchain network. "\n"
+✅ Python GUI: Simple GUI for managing and testing transactions. \n
+✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states. \n
 
 > **Installation & Setup**
 
