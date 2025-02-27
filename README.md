@@ -8,7 +8,7 @@ This project is a blockchain-based concurrency conflict resolution system design
 
 > Project Structure
 
-Blockchain-Concurrency-Confliction-Resolution/
+Blockchain-Concurrency-Confliction-Resolution/  
 │── Blockchain_Codebase/      # Go-based blockchain implementation  
 │── backup/                   # Backup of essential blockchain assets  
 │── chaincode/                 # Hyperledger Fabric smart contracts  
