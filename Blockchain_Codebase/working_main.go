@@ -156,12 +156,10 @@ func addBlockHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
-
 	if reqBody.ContainerID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing container ID"})
 		return
 	}
-
 	addBlock(reqBody.ContainerID)
 	c.JSON(http.StatusCreated, gin.H{"message": "Block added successfully"})
 }
