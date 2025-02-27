@@ -9,20 +9,20 @@ This project is a blockchain-based concurrency conflict resolution system design
 > Project Structure
 
 Blockchain-Concurrency-Confliction-Resolution/
-│── Blockchain_Codebase/      # Go-based blockchain implementation
-│── backup/                   # Backup of essential blockchain assets
-│── chaincode/                 # Hyperledger Fabric smart contracts
-│── fablo-target/              # Fablo-generated network artifacts
-│── fabric-samples/            # Hyperledger Fabric sample configurations
-│── GUI.py                     # Python GUI front-end
-│── blockchain_visualisation.html  # HTML-based blockchain visualization
-│── connection-profile.yaml     # Hyperledger Fabric network connection profile
-│── fablo-config.json           # Configuration file for Fablo
-│── go.mod                      # Go module dependencies
-│── go.sum                      # Go module hash checksums
-│── orderer-ca.crt              # Certificate for orderer node
-│── org2-ca.crt                 # Certificate for Org2 peer node
-└── README.md                   # Documentation (this file)
+│── Blockchain_Codebase/      # Go-based blockchain implementation  
+│── backup/                   # Backup of essential blockchain assets  
+│── chaincode/                 # Hyperledger Fabric smart contracts  
+│── fablo-target/              # Fablo-generated network artifacts  
+│── fabric-samples/            # Hyperledger Fabric sample configurations  
+│── GUI.py                     # Python GUI front-end  
+│── blockchain_visualisation.html  # HTML-based blockchain visualization  
+│── connection-profile.yaml     # Hyperledger Fabric network connection profile  
+│── fablo-config.json           # Configuration file for Fablo  
+│── go.mod                      # Go module dependencies  
+│── go.sum                      # Go module hash checksums  
+│── orderer-ca.crt              # Certificate for orderer node  
+│── org2-ca.crt                 # Certificate for Org2 peer node  
+└── README.md                   # Documentation (this file)  
 
 Features
 
@@ -68,8 +68,6 @@ go run main.go
 cd Blockchain_Codebase/blockchain-visualizer
 npm install
 npm run dev
-
-> **Screenshots**
 
 (Include images of the system, architecture, or UI here)
 
