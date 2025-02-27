@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -93,6 +95,7 @@ func runAPIServer(cli *client.Client) {
 	r.GET("/blockchain", getBlockchain)
 	r.GET("/blockchain/shard", getShardBlockchain)
 	r.POST("/addBlock", addBlockHandler)
+	r.POST("/addTransaction", addTransactionHandler)
 	r.GET("/conflicts", getConflicts)
 	r.DELETE("/removeLastBlock", removeLastBlock)
 
@@ -161,6 +164,59 @@ func addBlockHandler(c *gin.Context) {
 
 	addBlock(reqBody.ContainerID)
 	c.JSON(http.StatusCreated, gin.H{"message": "Block added successfully"})
+}
+
+func addTransactionHandler(c *gin.Context) {
+	var reqBody struct {
+		SourceBlock int    `json:"source"`
+		TargetBlock int    `json:"target"`
+		Data        string `json:"data"`
+	}
+
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+	// Ensure source block exists
+	var sourceBlock *Block
+	for i := range Blockchain {
+		if Blockchain[i].Index == reqBody.SourceBlock {
+			sourceBlock = &Blockchain[i]
+			break
+		}
+	}
+	if sourceBlock == nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Source block not found"})
+		return
+	}
+	// Ensure target block exists
+	var targetBlockExists bool
+	for _, block := range Blockchain {
+		if block.Index == reqBody.TargetBlock {
+			targetBlockExists = true
+			break
+		}
+	}
+
+	if !targetBlockExists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Target block not found"})
+		return
+	}
+
+	// Add transaction to the source block
+	transaction := Transaction{
+		ContainerID:   strconv.Itoa(reqBody.TargetBlock), // Using TargetBlock ID
+		Timestamp:     time.Now().Format(time.RFC3339),
+		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()),
+		Version:       len(sourceBlock.Transactions) + 1, // Ensuring versioning
+	}
+
+	sourceBlock.Transactions = append(sourceBlock.Transactions, transaction)
+
+	log.Printf("✅ Transaction added: Block %d -> Block %d | Data: %s",
+		reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+
+	c.JSON(http.StatusCreated, gin.H{"message": "Transaction added successfully"})
 }
 
 // Fetch concurrency conflicts
