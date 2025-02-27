@@ -195,7 +195,6 @@ func addTransactionHandler(c *gin.Context) {
 			break
 		}
 	}
-
 	if !targetBlockExists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Target block not found"})
 		return
