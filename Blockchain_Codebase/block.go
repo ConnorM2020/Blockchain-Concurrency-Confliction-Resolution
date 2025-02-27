@@ -96,18 +96,27 @@ func addTransaction(containerID string) error {
 		ContainerID:   containerID,
 		Timestamp:     timestamp,
 		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()),
+		Version:       1, // Ensure versioning
 	}
 
-	if len(Blockchain) > 0 && len(Blockchain[len(Blockchain)-1].Transactions) < maxTransactionsPerBlock {
-		latestBlock := &Blockchain[len(Blockchain)-1]
-
-		if latestBlock.ShardID == shardID {
-			latestBlock.Transactions = append(latestBlock.Transactions, newTransaction)
-			latestBlock.Hash = calculateHash(latestBlock.Index, latestBlock.Timestamp, latestBlock.Transactions, latestBlock.PreviousHash)
-			log.Printf("✅ Transaction added to block (Shard %d, Index %d)", shardID, latestBlock.Index)
-			return nil
+	// Find the latest block in the shard
+	var latestBlock *Block
+	for i := len(Blockchain) - 1; i >= 0; i-- {
+		if Blockchain[i].ShardID == shardID {
+			latestBlock = &Blockchain[i]
+			break
 		}
 	}
+
+	// If there’s an existing block in the shard with space, add transaction
+	if latestBlock != nil && len(latestBlock.Transactions) < maxTransactionsPerBlock {
+		latestBlock.Transactions = append(latestBlock.Transactions, newTransaction)
+		latestBlock.Hash = calculateHash(latestBlock.Index, latestBlock.Timestamp, latestBlock.Transactions, latestBlock.PreviousHash)
+		log.Printf("✅ Transaction added to block (Shard %d, Index %d)", shardID, latestBlock.Index)
+		return nil
+	}
+
+	// Otherwise, create a new block
 	createNewBlockWithTransaction(newTransaction)
 	return nil
 }
