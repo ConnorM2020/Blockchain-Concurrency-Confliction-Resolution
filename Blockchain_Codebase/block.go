@@ -28,6 +28,7 @@ type Transaction struct {
 	Timestamp     string `json:"timestamp"`
 	TransactionID string `json:"transaction_id"`
 	Version       int    `json:"version"`
+	Data          string `json:"data"`
 }
 
 const (
