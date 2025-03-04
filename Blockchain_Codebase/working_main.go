@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -27,6 +28,8 @@ var (
 	port    string
 	process bool
 	server  bool
+
+	transactionStatus = make(map[string]string)
 )
 
 // Middleware to allow CORS
@@ -86,14 +89,48 @@ func processContainers(cli *client.Client) {
 	visualizeShards()
 }
 
+func checkTransactionStatus(c *gin.Context) {
+	transactionID := c.Param("transactionID")
+
+	// First, check in the transactionStatus map
+	transactionMu.Lock()
+	status, exists := transactionStatus[transactionID]
+	transactionMu.Unlock()
+
+	if exists {
+		c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": status})
+		return
+	}
+	// If not found in pending, check in the blockchain itself
+	BlockchainMu.Lock()
+	defer BlockchainMu.Unlock()
+
+	for _, block := range Blockchain {
+		for _, tx := range block.Transactions {
+			if tx.TransactionID == transactionID {
+				// Mark transaction as completed in transactionStatus
+				transactionMu.Lock()
+				transactionStatus[transactionID] = "completed"
+				transactionMu.Unlock()
+
+				c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": "completed", "data": tx.Data})
+				return
+			}
+		}
+	}
+	// If still not found, return pending
+	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": "pending"})
+}
+
 // Start the REST API server
 func runAPIServer(cli *client.Client) {
 	r := gin.Default()
 	r.Use(CORSMiddleware()) // Enable CORS
-
 	// API Endpoints
 	r.GET("/blockchain", getBlockchain)
 	r.GET("/blockchain/shard", getShardBlockchain)
+	r.GET("/transactionStatus/:transactionID", checkTransactionStatus)
+
 	r.POST("/resetBlockchain", resetBlockchainHandler)
 	r.POST("/addBlock", addBlockHandler)
 	r.POST("/createShard", createShardHandler)
@@ -101,7 +138,7 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/addTransaction", addTransactionHandler)
 	r.GET("/conflicts", getConflicts)
 	r.DELETE("/removeLastBlock", removeLastBlock)
-
+	r.POST("/assignNodesToShard", assignNodesToShardHandler)
 	// Start Server
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -126,6 +163,48 @@ func runAPIServer(cli *client.Client) {
 		log.Fatalf("❌ Error shutting down server: %v", err)
 	}
 	log.Println("✅ Server shutdown complete.")
+}
+
+// API to check transaction status
+func getTransactionStatus(c *gin.Context) {
+	transactionID := c.Param("transactionID")
+
+	transactionMu.Lock()
+	defer transactionMu.Unlock()
+
+	status, exists := transactionStatus[transactionID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": status})
+}
+
+// Assign multiple nodes to a specific shard
+func assignNodesToShardHandler(c *gin.Context) {
+	var reqBody struct {
+		ShardID int   `json:"shard_id"`
+		Nodes   []int `json:"nodes"`
+	}
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+	if reqBody.ShardID < 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Shard ID"})
+		return
+	}
+	// Assign selected nodes to the specified shard
+	for i := range Blockchain {
+		for _, nodeID := range reqBody.Nodes {
+			if Blockchain[i].Index == nodeID {
+				Blockchain[i].ShardID = reqBody.ShardID
+			}
+		}
+	}
+	log.Printf("✅ Assigned nodes %v to Shard %d", reqBody.Nodes, reqBody.ShardID)
+	c.JSON(http.StatusOK, gin.H{"message": "Nodes assigned to shard successfully"})
 }
 
 // Get entire blockchain
@@ -155,16 +234,38 @@ func addBlockHandler(c *gin.Context) {
 	var reqBody struct {
 		ContainerID string `json:"containerID"`
 	}
+	// Parse request body
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
+	// Validate ContainerID
 	if reqBody.ContainerID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing container ID"})
 		return
 	}
+	// Lock blockchain to ensure thread safety
+	BlockchainMu.Lock()
+
+	// Check if a block with the same container ID already exists
+	for _, block := range Blockchain {
+		if block.ContainerID == reqBody.ContainerID {
+			BlockchainMu.Unlock()
+			log.Printf("⚠️ Block with ContainerID %s already exists", reqBody.ContainerID)
+			c.JSON(http.StatusConflict, gin.H{"error": "Block already exists"})
+			return
+		}
+	}
 	addBlock(reqBody.ContainerID)
-	c.JSON(http.StatusCreated, gin.H{"message": "Block added successfully"})
+	totalBlocks := len(Blockchain)
+	BlockchainMu.Unlock()
+
+	// Log blockchain state after modification
+	log.Printf("✅ Block added: ContainerID %s | Total Blocks: %d", reqBody.ContainerID, totalBlocks)
+	log.Printf("📌 Current Blockchain State: %+v", Blockchain)
+
+	// Return success response
+	c.JSON(http.StatusCreated, gin.H{"message": "Block added successfully", "total_blocks": totalBlocks})
 }
 
 func addTransactionHandler(c *gin.Context) {
@@ -174,54 +275,85 @@ func addTransactionHandler(c *gin.Context) {
 		Data        string `json:"data"`
 	}
 
+	// Parse and validate request
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
 
+	// Generate a unique Transaction ID
+	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+
+	// Store transaction as pending before executing
+	transactionMu.Lock()
+	transactionStatus[transactionID] = "pending"
+	transactionMu.Unlock()
+
+	// Run transaction processing in a separate goroutine (non-blocking)
+	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+
+	// Immediately return response to the user
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":       "Transaction submitted for processing",
+		"transactionID": transactionID,
+		"status":        "pending",
+	})
+}
+
+// processTransaction executes a transaction asynchronously
+func processTransaction(transactionID string, sourceBlockIdx int, targetBlockIdx int, data string) {
+	BlockchainMu.Lock()
+
 	// Ensure source block exists
 	var sourceBlock *Block
 	for i := range Blockchain {
-		if Blockchain[i].Index == reqBody.SourceBlock {
+		if Blockchain[i].Index == sourceBlockIdx {
 			sourceBlock = &Blockchain[i]
 			break
 		}
 	}
-
-	if sourceBlock == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Source block not found"})
-		return
-	}
-
 	// Ensure target block exists
 	var targetBlockExists bool
 	for _, block := range Blockchain {
-		if block.Index == reqBody.TargetBlock {
+		if block.Index == targetBlockIdx {
 			targetBlockExists = true
 			break
 		}
 	}
+	BlockchainMu.Unlock()
 
-	if !targetBlockExists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Target block not found"})
+	// Handle missing blocks
+	if sourceBlock == nil || !targetBlockExists {
+		transactionMu.Lock()
+		transactionStatus[transactionID] = "failed"
+		transactionMu.Unlock()
+		log.Printf("❌ Transaction %s failed: Source or Target block missing", transactionID)
 		return
 	}
 
-	// Add transaction to the source block
+	// Simulate some processing time (e.g., validation, consensus, etc.)
+	time.Sleep(time.Duration(1+rand.Intn(3)) * time.Second)
+
+	// Add transaction safely
 	transaction := Transaction{
-		ContainerID:   strconv.Itoa(reqBody.TargetBlock),           // Target block ID
-		Timestamp:     time.Now().Format(time.RFC3339),             // Current timestamp
-		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()), // Unique transaction ID
-		Version:       len(sourceBlock.Transactions) + 1,           // Increment versioning
-		Data:          reqBody.Data,                                // ✅ Store the actual transaction data
+		ContainerID:   strconv.Itoa(targetBlockIdx),
+		Timestamp:     time.Now().Format(time.RFC3339),
+		TransactionID: transactionID,
+		Version:       len(sourceBlock.Transactions) + 1,
+		Data:          data,
 	}
 
+	BlockchainMu.Lock()
 	sourceBlock.Transactions = append(sourceBlock.Transactions, transaction)
+	BlockchainMu.Unlock()
 
-	log.Printf("✅ Transaction added: Block %d -> Block %d | Data: %s",
-		reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+	// Update transaction status
+	transactionMu.Lock()
+	transactionStatus[transactionID] = "completed"
+	transactionMu.Unlock()
 
-	c.JSON(http.StatusCreated, gin.H{"message": "Transaction added successfully"})
+	log.Printf("✅ Transaction %s completed: Block %d -> Block %d | Data: %s",
+		transactionID, sourceBlockIdx, targetBlockIdx, data)
 }
 
 func createShardHandler(c *gin.Context) {
