@@ -94,7 +94,10 @@ func runAPIServer(cli *client.Client) {
 	// API Endpoints
 	r.GET("/blockchain", getBlockchain)
 	r.GET("/blockchain/shard", getShardBlockchain)
+	r.POST("/resetBlockchain", resetBlockchainHandler)
 	r.POST("/addBlock", addBlockHandler)
+	r.POST("/createShard", createShardHandler)
+
 	r.POST("/addTransaction", addTransactionHandler)
 	r.GET("/conflicts", getConflicts)
 	r.DELETE("/removeLastBlock", removeLastBlock)
@@ -175,6 +178,7 @@ func addTransactionHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
+
 	// Ensure source block exists
 	var sourceBlock *Block
 	for i := range Blockchain {
@@ -183,10 +187,12 @@ func addTransactionHandler(c *gin.Context) {
 			break
 		}
 	}
+
 	if sourceBlock == nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Source block not found"})
 		return
 	}
+
 	// Ensure target block exists
 	var targetBlockExists bool
 	for _, block := range Blockchain {
@@ -195,6 +201,7 @@ func addTransactionHandler(c *gin.Context) {
 			break
 		}
 	}
+
 	if !targetBlockExists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "Target block not found"})
 		return
@@ -202,10 +209,11 @@ func addTransactionHandler(c *gin.Context) {
 
 	// Add transaction to the source block
 	transaction := Transaction{
-		ContainerID:   strconv.Itoa(reqBody.TargetBlock), // Using TargetBlock ID
-		Timestamp:     time.Now().Format(time.RFC3339),
-		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()),
-		Version:       len(sourceBlock.Transactions) + 1, // Ensuring versioning
+		ContainerID:   strconv.Itoa(reqBody.TargetBlock),           // Target block ID
+		Timestamp:     time.Now().Format(time.RFC3339),             // Current timestamp
+		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()), // Unique transaction ID
+		Version:       len(sourceBlock.Transactions) + 1,           // Increment versioning
+		Data:          reqBody.Data,                                // ✅ Store the actual transaction data
 	}
 
 	sourceBlock.Transactions = append(sourceBlock.Transactions, transaction)
@@ -214,6 +222,37 @@ func addTransactionHandler(c *gin.Context) {
 		reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
 
 	c.JSON(http.StatusCreated, gin.H{"message": "Transaction added successfully"})
+}
+
+func createShardHandler(c *gin.Context) {
+	var reqBody struct {
+		Nodes []int `json:"nodes"`
+	}
+
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+
+	for _, nodeID := range reqBody.Nodes {
+		for i := range Blockchain {
+			if Blockchain[i].Index == nodeID {
+				Blockchain[i].ShardID = len(Blockchain) // Assign new shard
+			}
+		}
+	}
+
+	log.Printf("✅ New shard created with nodes: %v", reqBody.Nodes)
+	c.JSON(http.StatusOK, gin.H{"message": "Shard created successfully"})
+}
+
+func resetBlockchainHandler(c *gin.Context) {
+	for i := range Blockchain {
+		Blockchain[i].ShardID = 0 // Reset all nodes to one shard
+	}
+
+	log.Println("✅ Blockchain reset to single linear chain.")
+	c.JSON(http.StatusOK, gin.H{"message": "Blockchain reset successfully"})
 }
 
 // Fetch concurrency conflicts
