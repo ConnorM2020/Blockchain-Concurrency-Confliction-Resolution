@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"sync"
 	"time"
+
+	"github.com/gin-gonic/gin"
 )
 
 // Blockchain structures
@@ -31,6 +34,15 @@ type Transaction struct {
 	Data          string `json:"data"`
 }
 
+// Handling concurrency
+type TransactionSegment struct {
+	TransactionID string `json:"transaction_id"`
+	ShardID       int    `json:"shard_id"`
+	SegmentIndex  int    `json:"segment_index"`
+	TotalSegments int    `json:"total_segments"`
+	Data          string `json:"data"`
+}
+
 const (
 	NumShards               = 2 // Shard 0 for Org1, Shard 1 for Org2
 	maxTransactionsPerBlock = 3 // Limit per block
@@ -43,9 +55,11 @@ var (
 	conflictsMu          sync.Mutex
 	Blockchain           []Block
 	BlockchainMu         sync.Mutex
-	txQueue              = make(chan Transaction, 100)
-	shardMutexes         [NumShards]sync.Mutex
-	retryBackoff         = []time.Duration{100 * time.Millisecond, 500 * time.Millisecond, 1 * time.Second}
+	transactionSegments  = make(map[string][]TransactionSegment)
+	transactionMu        sync.Mutex
+	// txQueue              = make(chan Transaction, 100)
+	// shardMutexes         [NumShards]sync.Mutex
+	// retryBackoff         = []time.Duration{100 * time.Millisecond, 500 * time.Millisecond, 1 * time.Second}
 )
 
 // Function to calculate hash for a block
@@ -72,75 +86,6 @@ func getShardID(containerID string) int {
 	return int(hash[0]) % NumShards
 }
 
-// Validate if block integrity is maintained
-func validateBlock(block Block) bool {
-	calculatedHash := calculateHash(block.Index, block.Timestamp, block.Transactions, block.PreviousHash)
-	return block.Hash == calculatedHash
-}
-
-// Function to add a new transaction with concurrency control
-func addTransaction(containerID string) error {
-	BlockchainMu.Lock()
-	defer BlockchainMu.Unlock()
-
-	shardID := getShardID(containerID)
-
-	// Check for concurrency conflicts
-	if checkContainerIDExists(containerID) {
-		log.Printf("⚠️ Conflict: Transaction exists for %s", containerID)
-		logConflict(containerID)
-		return fmt.Errorf("conflict: container ID exists")
-	}
-
-	timestamp := time.Now().Format(time.RFC3339)
-	newTransaction := Transaction{
-		ContainerID:   containerID,
-		Timestamp:     timestamp,
-		TransactionID: fmt.Sprintf("tx-%d", time.Now().UnixNano()),
-		Version:       1, // Ensure versioning
-	}
-
-	// Find the latest block in the shard
-	var latestBlock *Block
-	for i := len(Blockchain) - 1; i >= 0; i-- {
-		if Blockchain[i].ShardID == shardID {
-			latestBlock = &Blockchain[i]
-			break
-		}
-	}
-
-	// If there’s an existing block in the shard with space, add transaction
-	if latestBlock != nil && len(latestBlock.Transactions) < maxTransactionsPerBlock {
-		latestBlock.Transactions = append(latestBlock.Transactions, newTransaction)
-		latestBlock.Hash = calculateHash(latestBlock.Index, latestBlock.Timestamp, latestBlock.Transactions, latestBlock.PreviousHash)
-		log.Printf("✅ Transaction added to block (Shard %d, Index %d)", shardID, latestBlock.Index)
-		return nil
-	}
-
-	// Otherwise, create a new block
-	createNewBlockWithTransaction(newTransaction)
-	return nil
-}
-
-// logConflict stores concurrency conflicts in a global slice
-func logConflict(containerID string) {
-	conflictsMu.Lock()
-	defer conflictsMu.Unlock()
-
-	conflictMessage := fmt.Sprintf("⚠️ Concurrency conflict detected for container: %s", containerID)
-
-	// Debugging: Log when a conflict is stored
-	log.Println("Storing Conflict:", conflictMessage)
-
-	// Store the conflict
-	concurrencyConflicts = append(concurrencyConflicts, conflictMessage)
-
-	// Keep only the last 100 conflicts to prevent memory overflow
-	if len(concurrencyConflicts) > 100 {
-		concurrencyConflicts = concurrencyConflicts[len(concurrencyConflicts)-100:]
-	}
-}
-
 func addBlock(containerID string) {
 	BlockchainMu.Lock()
 	defer BlockchainMu.Unlock()
@@ -155,6 +100,7 @@ func addBlock(containerID string) {
 		previousHash = "0" // Genesis block
 		version = 1
 	}
+
 	timestamp := time.Now().Format(time.RFC3339)
 	shardID := getShardID(containerID) // Ensure shard assignment
 
@@ -162,63 +108,71 @@ func addBlock(containerID string) {
 		Index:        len(Blockchain),
 		Timestamp:    timestamp,
 		ContainerID:  containerID,
-		Transactions: []Transaction{},
+		Transactions: []Transaction{}, // Initially empty
 		PreviousHash: previousHash,
 		Hash:         calculateHash(len(Blockchain), timestamp, []Transaction{}, previousHash),
 		Version:      version,
 		ShardID:      shardID,
 	}
+
 	Blockchain = append(Blockchain, newBlock)
 	log.Printf("✅ Block added to blockchain (Shard %d): %+v", shardID, newBlock)
 }
 
-func createNewBlockWithTransaction(tx Transaction) {
-	BlockchainMu.Lock()
-	defer BlockchainMu.Unlock()
-	var previousHash string
-	var version int
-	// Determine previous block hash and increment version
-	if len(Blockchain) > 0 {
-		previousHash = Blockchain[len(Blockchain)-1].Hash
-		version = Blockchain[len(Blockchain)-1].Version + 1
-	} else {
-		previousHash = "0" // Genesis block case
-		version = 1
-	}
-	// Assign transaction to a shard based on ContainerID
-	shardID := getShardID(tx.ContainerID)
-	// Create a new block
-	newBlock := Block{
-		Index:        len(Blockchain),
-		Timestamp:    tx.Timestamp,
-		ContainerID:  tx.ContainerID,
-		Transactions: []Transaction{tx},
-		PreviousHash: previousHash,
-		Hash:         calculateHash(len(Blockchain), tx.Timestamp, []Transaction{tx}, previousHash),
-		Version:      version,
-		ShardID:      shardID,
-	}
-	Blockchain = append(Blockchain, newBlock)
-	log.Printf("✅ New block created (Shard %d, Index %d): %+v", shardID, newBlock.Index, tx)
-}
+func addTransactionSegmentHandler(c *gin.Context) {
+	var segment TransactionSegment
 
-// checkContainerIDExists verifies if a container ID already exists in the blockchain
-func checkContainerIDExists(containerID string) bool {
-	BlockchainMu.Lock()
-	defer BlockchainMu.Unlock()
-
-	// Iterate over all blocks and transactions to check for the container ID
-	for _, block := range Blockchain {
-		if block.ContainerID == containerID {
-			return true
-		}
-		for _, tx := range block.Transactions {
-			if tx.ContainerID == containerID {
-				return true
-			}
-		}
+	if err := c.ShouldBindJSON(&segment); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
 	}
-	return false
+
+	transactionMu.Lock()
+	transactionSegments[segment.TransactionID] = append(transactionSegments[segment.TransactionID], segment)
+	transactionMu.Unlock()
+
+	// Check if all segments have arrived
+	if len(transactionSegments[segment.TransactionID]) == segment.TotalSegments {
+		// Reconstruct full transaction
+		fullData := ""
+		for _, seg := range transactionSegments[segment.TransactionID] {
+			fullData += seg.Data
+		}
+
+		// Ensure blockchain is not empty before appending
+		if len(Blockchain) == 0 {
+			log.Println("⚠️ Blockchain is empty, initializing genesis block.")
+			addBlock("genesis") // Create the first block if none exist
+		}
+
+		// Add full transaction to blockchain
+		newTransaction := Transaction{
+			ContainerID:   segment.TransactionID,
+			Timestamp:     time.Now().Format(time.RFC3339),
+			TransactionID: segment.TransactionID,
+			Version:       len(Blockchain), // Increment transaction version
+			Data:          fullData,
+		}
+
+		// Append transaction safely
+		BlockchainMu.Lock()
+		Blockchain[len(Blockchain)-1].Transactions = append(Blockchain[len(Blockchain)-1].Transactions, newTransaction)
+		BlockchainMu.Unlock()
+
+		// Log success
+		log.Printf("✅ Transaction fully assembled: %s", fullData)
+
+		// Delete stored segments only after response
+		delete(transactionSegments, segment.TransactionID)
+
+		// Send API response
+		c.JSON(http.StatusOK, gin.H{"message": "Transaction successfully completed"})
+		return
+	}
+
+	// Log received segment
+	log.Printf("🔄 Received segment %d/%d for transaction %s", segment.SegmentIndex+1, segment.TotalSegments, segment.TransactionID)
+	c.JSON(http.StatusOK, gin.H{"message": "Segment received"})
 }
 
 func displayBlockchain() {
