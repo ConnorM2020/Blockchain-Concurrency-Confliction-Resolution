@@ -115,8 +115,59 @@ export default function SpiderWebView() {
       return "Unknown";
     }
   };
+  const sendShardedTransactions = async () => {
+    if (parallelTransactions.length === 0) {
+      alert("Please enter at least one transaction.");
+      return;
+    }
   
-
+    try {
+      const formattedTransactions = parallelTransactions.map(tx => ({
+        source: tx.source.split(",").map(node => node.trim()), // Convert CSV to array
+        target: tx.target.split(",").map(node => node.trim()),
+        data: tx.data.trim(),
+      }));
+  
+      const shardSize = 3;
+      const shards = [];
+      for (let i = 0; i < formattedTransactions.length; i += shardSize) {
+        shards.push(formattedTransactions.slice(i, i + shardSize));
+      }
+  
+      // Send each shard in parallel
+      const promises = shards.map(shard =>
+        fetch(`${API_BASE}/shardTransactions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ transactions: shard }),
+        }).then(response => response.json())
+          .then(data => updatePeerNodes(data.transactionIDs)) // Notify peers
+      );
+  
+      await Promise.all(promises);
+      alert("Transactions successfully sent and peers updated!");
+  
+      setParallelTransactions([]);
+      setParallelModalOpen(false);
+    } catch (error) {
+      console.error("❌ Error sending sharded transactions:", error);
+    }
+  };
+  
+  // Function to notify all peer nodes about the new transactions
+  const updatePeerNodes = async (transactionIDs) => {
+    try {
+      await fetch(`${API_BASE}/updatePeers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactionIDs }),
+      });
+      console.log("✅ Peers successfully updated with transaction history.");
+    } catch (error) {
+      console.error("❌ Error updating peers:", error);
+    }
+  };
+  
   const formatSpiderWebData = (blocks) => {
     let newNodes = [];
     let newEdges = [];
@@ -336,7 +387,9 @@ export default function SpiderWebView() {
         {/* Parallel Transactions Modal */}
         {parallelModalOpen && (
           <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Send Parallel Transactions</h2>
+            <h2 className="text-xl font-bold mb-4 text-white">
+              Send <span className="text-blue-400">Parallel Transactions</span>
+            </h2>
   
             {parallelTransactions.map((tx, index) => (
               <div key={index} className="mb-2">
@@ -364,53 +417,70 @@ export default function SpiderWebView() {
               </div>
             ))}
   
-            <button onClick={addNewParallelTransaction} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">
-              + Add Transaction
-            </button>
-            <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-500 text-white rounded">
-              Send Transactions
-            </button>
+            <div className="flex justify-between mt-4">
+              {/* Back Button */}
+              <button onClick={() => setParallelModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
+                Back
+              </button>
+
+  
+              <button onClick={addNewParallelTransaction} className="px-4 py-2 bg-blue-500 text-white rounded">
+                + Add Transaction
+              </button>
+  
+              <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-500 text-white rounded">
+                Send Transactions
+              </button>
+            </div>
           </div>
         )}
   
-        {/* Shard Selection Modal */}
-        {shardModalOpen && (
-          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Assign Nodes to a Shard</h2>
-  
-            {/* Dropdown for selecting Shard ID */}
-            <label className="block text-white mb-2">Select Shard ID:</label>
-            <select
-              value={selectedShard}
-              onChange={(e) => setSelectedShard(Number(e.target.value))}
-              className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
-            >
-              {shardOptions.map((shard) => (
-                <option key={shard} value={shard}>
-                  Shard {shard}
-                </option>
-              ))}
-            </select>
-  
-            {/* Checkboxes for selecting nodes */}
-            <div className="max-h-40 overflow-y-auto border p-2 rounded bg-gray-700">
-              {nodes.map((node) => (
-                <label key={node.id} className="flex items-center space-x-2 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={selectedNodes.includes(node.id)}
-                    onChange={() => toggleNodeSelection(node.id)}
-                  />
-                  <span>{node.data.label}</span>
-                </label>
-              ))}
-            </div>
-  
-            <button onClick={confirmShardCreation} className="px-4 py-2 bg-green-600 text-white rounded mt-4">
+       {/* Shard Selection Modal */}
+      {shardModalOpen && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+          <h2 className="text-xl font-bold mb-4">Assign Nodes to a Shard</h2>
+
+          {/* Dropdown for selecting Shard ID */}
+          <label className="block text-white mb-2">Select Shard ID:</label>
+          <select
+            value={selectedShard}
+            onChange={(e) => setSelectedShard(Number(e.target.value))}
+            className="w-full p-2 mb-4 bg-gray-700 text-white rounded"
+          >
+            {shardOptions.map((shard) => (
+              <option key={shard} value={shard}>
+                Shard {shard}
+              </option>
+            ))}
+          </select>
+
+          {/* Checkboxes for selecting nodes */}
+          <div className="max-h-40 overflow-y-auto border p-2 rounded bg-gray-700">
+            {nodes.map((node) => (
+              <label key={node.id} className="flex items-center space-x-2 mb-2">
+                <input
+                  type="checkbox"
+                  checked={selectedNodes.includes(node.id)}
+                  onChange={() => toggleNodeSelection(node.id)}
+                />
+                <span>{node.data.label}</span>
+              </label>
+            ))}
+          </div>
+
+          <div className="flex justify-between mt-4">
+            {/* Back Button */}
+            <button onClick={() => setShardModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
+              Back
+            </button>
+
+            <button onClick={confirmShardCreation} className="px-4 py-2 bg-green-600 text-white rounded">
               Assign to Shard
             </button>
           </div>
-        )}
+        </div>
+      )}
+
       </div>
     </ReactFlowProvider>
   );
