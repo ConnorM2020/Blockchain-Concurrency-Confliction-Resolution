@@ -20,6 +20,10 @@ export default function SpiderWebView() {
   const [sourceNode, setSourceNode] = useState(null);
   const [targetNode, setTargetNode] = useState(null);
   const [transactionStatus, setTransactionStatus] = useState({})
+  const [parallelModalOpen, setParallelModalOpen] = useState(false)
+  const [parallelTransactions, setParallelTransactions] = useState([]);
+
+
   useEffect(() => {
     fetchBlockchain();
     if (pendingTransactions.length > 0) {
@@ -39,6 +43,7 @@ export default function SpiderWebView() {
       console.error("Error fetching blockchain data:", err);
     }
   };
+
   
   const sendTransaction = async () => {
     if (!sourceNode || !targetNode || !transactionData.trim()) {
@@ -185,6 +190,56 @@ export default function SpiderWebView() {
     );
   };
 
+  const updateParallelTransaction = (index, field, value) => {
+    setParallelTransactions((prev) => {
+        const updatedTransactions = [...prev];
+        updatedTransactions[index] = { ...updatedTransactions[index], [field]: value };
+        return updatedTransactions;
+    });
+};
+  const addNewParallelTransaction = () => {
+    setParallelTransactions([...parallelTransactions, { source: "", target: "", data: "" }]);
+  };
+
+  const sendParallelTransactions = async () => {
+    if (parallelTransactions.length === 0) {
+        alert("Please enter at least one transaction.");
+        return;
+    }
+    // Ensure transactions have valid source, target, and data fields
+    const formattedTransactions = parallelTransactions.map((tx) => ({
+        source: Number(tx.source),
+        target: Number(tx.target),
+        data: tx.data.trim(),
+    })).filter(tx => tx.source && tx.target && tx.data); // Remove empty transactions
+
+    if (formattedTransactions.length === 0) {
+        alert("Please ensure all transactions have valid data.");
+        return;
+    }
+    try {
+        const response = await fetch(`${API_BASE}/addParallelTransactions`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formattedTransactions),
+        });
+
+        if (!response.ok) {
+            const errorMessage = await response.text();
+            throw new Error(`HTTP Error: ${response.status}, ${errorMessage}`);
+        }
+
+        const result = await response.json();
+        const transactionIDs = result.transactionIDs;
+
+        setPendingTransactions((prev) => [...prev, ...transactionIDs]);
+        setParallelModalOpen(false);
+        setParallelTransactions([]); // Reset transactions input
+    } catch (error) {
+        console.error("❌ Error sending parallel transactions:", error);
+    }
+};
+
   const confirmShardCreation = async () => {
     if (selectedNodes.length === 0) {
       alert("Please select nodes to assign to a shard.");
@@ -238,6 +293,10 @@ export default function SpiderWebView() {
             Create New Shard
           </button>
   
+          <button onClick={() => setParallelModalOpen(true)} className="px-4 py-2 bg-green-600 text-white rounded">
+            Parallel Transactions
+          </button>
+  
           <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={resetBlockchain}>
             Reset Blockchain
           </button>
@@ -270,6 +329,46 @@ export default function SpiderWebView() {
             />
             <button onClick={sendTransaction} className="px-4 py-2 bg-green-600 text-white rounded mt-4">
               Send
+            </button>
+          </div>
+        )}
+  
+        {/* Parallel Transactions Modal */}
+        {parallelModalOpen && (
+          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+            <h2 className="text-xl font-bold mb-4">Send Parallel Transactions</h2>
+  
+            {parallelTransactions.map((tx, index) => (
+              <div key={index} className="mb-2">
+                <input
+                  type="number"
+                  placeholder="Source Node"
+                  value={tx.source}
+                  onChange={(e) => updateParallelTransaction(index, "source", e.target.value)}
+                  className="w-full p-2 mb-2 bg-gray-700 text-white rounded"
+                />
+                <input
+                  type="number"
+                  placeholder="Target Node"
+                  value={tx.target}
+                  onChange={(e) => updateParallelTransaction(index, "target", e.target.value)}
+                  className="w-full p-2 mb-2 bg-gray-700 text-white rounded"
+                />
+                <input
+                  type="text"
+                  placeholder="Transaction Data"
+                  value={tx.data}
+                  onChange={(e) => updateParallelTransaction(index, "data", e.target.value)}
+                  className="w-full p-2 bg-gray-700 text-white rounded"
+                />
+              </div>
+            ))}
+  
+            <button onClick={addNewParallelTransaction} className="px-4 py-2 bg-blue-500 text-white rounded mr-2">
+              + Add Transaction
+            </button>
+            <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-500 text-white rounded">
+              Send Transactions
             </button>
           </div>
         )}
@@ -315,6 +414,4 @@ export default function SpiderWebView() {
       </div>
     </ReactFlowProvider>
   );
-}
-
-
+}  

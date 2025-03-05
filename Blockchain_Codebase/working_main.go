@@ -119,6 +119,7 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/createShard", createShardHandler)
 	r.POST("/addTransactionSegment", addTransactionSegmentHandler)
 	r.POST("/addTransaction", addTransactionHandler)
+	r.POST("/addParallelTransactions", addParallelTransactionsHandler)
 
 	r.GET("/conflicts", getConflicts)
 
@@ -288,6 +289,40 @@ func addTransactionHandler(c *gin.Context) {
 
 // Add multiple transactions in parallel
 func addParallelTransactions(c *gin.Context) {
+	var transactions []Transaction
+	if err := c.ShouldBindJSON(&transactions); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+
+	if len(transactions) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
+		return
+	}
+	var transactionIDs []string
+	for _, tx := range transactions {
+		transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+		tx.TransactionID = transactionID
+
+		TransactionMu.Lock()
+		transactionStatus[transactionID] = "pending"
+		TransactionPool[transactionID] = &tx
+		TransactionMu.Unlock()
+
+		transactionIDs = append(transactionIDs, transactionID)
+
+		// Process transaction asynchronously
+		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data)
+	}
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":        "Transactions are being processed",
+		"transactionIDs": transactionIDs,
+	})
+}
+
+
+
+func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction
 	if err := c.ShouldBindJSON(&transactions); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
