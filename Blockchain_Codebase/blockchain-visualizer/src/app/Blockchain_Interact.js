@@ -23,6 +23,7 @@ export default function SpiderWebView() {
   const [parallelModalOpen, setParallelModalOpen] = useState(false)
   const [parallelTransactions, setParallelTransactions] = useState([]);
 
+  const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
     fetchBlockchain();
@@ -236,11 +237,14 @@ export default function SpiderWebView() {
     }
   };
   const toggleNodeSelection = (nodeId) => {
+    const numericNodeId = Number(nodeId); // Ensure nodeId is treated as a number
     setSelectedNodes((prev) =>
-      prev.includes(nodeId) ? prev.filter((id) => id !== nodeId) : [...prev, nodeId]
+      prev.includes(numericNodeId)
+        ? prev.filter((id) => id !== numericNodeId) // Remove if already selected
+        : [...prev, numericNodeId] // Add if not selected
     );
   };
-
+  
   const updateParallelTransaction = (index, field, value) => {
     setParallelTransactions((prev) => {
         const updatedTransactions = [...prev];
@@ -257,40 +261,57 @@ export default function SpiderWebView() {
         alert("Please enter at least one transaction.");
         return;
     }
-    // Ensure transactions have valid source, target, and data fields
-    const formattedTransactions = parallelTransactions.map((tx) => ({
-        source: Number(tx.source),
-        target: Number(tx.target),
-        data: tx.data.trim(),
-    })).filter(tx => tx.source && tx.target && tx.data); // Remove empty transactions
-
-    if (formattedTransactions.length === 0) {
-        alert("Please ensure all transactions have valid data.");
-        return;
-    }
     try {
-        const response = await fetch(`${API_BASE}/addParallelTransactions`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(formattedTransactions),
-        });
+        // Convert input to support multiple sources and targets
+        const formattedTransactions = parallelTransactions.map((tx) => ({
+            source: tx.source.split(",").map(node => Number(node.trim())), // Convert CSV input to array of numbers
+            target: tx.target.split(",").map(node => Number(node.trim())),
+            data: tx.data.trim(),
+        })).filter(tx => tx.source.length > 0 && tx.target.length > 0 && tx.data); // Remove invalid transactions
 
-        if (!response.ok) {
-            const errorMessage = await response.text();
-            throw new Error(`HTTP Error: ${response.status}, ${errorMessage}`);
+        if (formattedTransactions.length === 0) {
+            alert("Please ensure all transactions have valid data.");
+            return;
+        }
+        // Divide transactions into smaller shards (default: 3 per batch)
+        const shardSize = 3;
+        const shards = [];
+        for (let i = 0; i < formattedTransactions.length; i += shardSize) {
+            shards.push(formattedTransactions.slice(i, i + shardSize));
         }
 
-        const result = await response.json();
-        const transactionIDs = result.transactionIDs;
+        // Send each shard in parallel
+        const promises = shards.map(async (shard) => {
+            const response = await fetch(`${API_BASE}/shardTransactions`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ transactions: shard }),
+            });
 
-        setPendingTransactions((prev) => [...prev, ...transactionIDs]);
+            if (!response.ok) {
+                throw new Error(`HTTP Error: ${response.status}`);
+            }
+
+            const result = await response.json();
+            return result.transactionIDs;
+        });
+
+        // Wait for all parallel transactions to complete
+        const transactionResults = await Promise.all(promises);
+        const allTransactionIDs = transactionResults.flat();
+
+        // Track these transactions as pending
+        setPendingTransactions((prev) => [...prev, ...allTransactionIDs]);
+
+        // Close modal and reset transactions
         setParallelModalOpen(false);
-        setParallelTransactions([]); // Reset transactions input
+        setParallelTransactions([]);
+        alert("Transactions successfully sent in parallel!");
+
     } catch (error) {
         console.error("❌ Error sending parallel transactions:", error);
     }
 };
-
   const confirmShardCreation = async () => {
     if (selectedNodes.length === 0) {
       alert("Please select nodes to assign to a shard.");
@@ -360,7 +381,22 @@ export default function SpiderWebView() {
             <Background />
           </ReactFlow>
         </div>
-  
+        {selectedNode && selectedNode.data && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+          <h2 className="text-xl font-bold mb-4 text-white">Node Details</h2>
+
+          <p className="text-white"><strong>Name:</strong> {selectedNode?.data?.label || "N/A"}</p>
+          <p className="text-white"><strong>Shard:</strong> {selectedNode?.data?.shard || "Unassigned"}</p>
+          <p className="text-white"><strong>Peers:</strong> {selectedNode?.data?.peers?.join(", ") || "None"}</p>
+          <p className="text-white"><strong>Hash:</strong> {selectedNode?.data?.hash || "N/A"}</p>
+          <p className="text-white"><strong>Transactions:</strong> {selectedNode?.data?.transactions?.length || 0}</p>
+          <p className="text-white"><strong>Amount:</strong> {selectedNode?.data?.amount || "N/A"}</p>
+
+          <button onClick={() => setSelectedNode(null)} className="px-4 py-2 bg-gray-500 text-white rounded mt-4">
+            Close
+          </button>
+        </div>
+      )}
         {/* Transaction Status Overlay */}
         {Object.keys(transactionStatus || {}).length > 0 &&
           Object.keys(transactionStatus).map((txID) => (

@@ -22,15 +22,17 @@ import (
 const (
 	blockchainFile = "blockchain.json"
 	maxRetries     = 3
+	maxSegmentSize = 10
 )
 
 var (
-	port              string
-	process           bool
-	server            bool
-	TransactionPool   = make(map[string]*Transaction)
-	transactionStatus = make(map[string]string)
-	TransactionMu     sync.Mutex
+	port                string
+	process             bool
+	server              bool
+	TransactionPool     = make(map[string]*Transaction)
+	transactionStatus   = make(map[string]string)
+	TransactionMu       sync.Mutex
+	transactionSegments = make(map[string][]TransactionSegment)
 )
 
 // Middleware to allow CORS
@@ -56,6 +58,87 @@ func init() {
 	flag.Parse()
 
 	initShards() // Ensure sharding system is initialized
+}
+
+// Process a transaction asynchronously with segmentation
+func processTransaction(transactionID string, source int, target int, data string) {
+	time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
+
+	// Lock blockchain
+	BlockchainMu.Lock()
+	defer BlockchainMu.Unlock()
+
+	// Find source block
+	var sourceBlock *Block
+	for i := range Blockchain {
+		if Blockchain[i].Index == source {
+			sourceBlock = &Blockchain[i]
+			break
+		}
+	}
+
+	if sourceBlock == nil {
+		log.Printf("⚠️ Source block %d not found for transaction %s", source, transactionID)
+		TransactionMu.Lock()
+		transactionStatus[transactionID] = "failed"
+		TransactionMu.Unlock()
+		return
+	}
+
+	// Split large transactions into segments
+	totalSegments := (len(data) + maxSegmentSize - 1) / maxSegmentSize
+
+	TransactionMu.Lock()
+	transactionSegments[transactionID] = make([]TransactionSegment, 0, totalSegments)
+	TransactionMu.Unlock()
+
+	for i := 0; i < totalSegments; i++ {
+		start := i * maxSegmentSize
+		end := start + maxSegmentSize
+		if end > len(data) {
+			end = len(data)
+		}
+
+		segment := TransactionSegment{
+			TransactionID: transactionID,
+			ShardID:       getShardID(fmt.Sprintf("%d", source)),
+			SegmentIndex:  i,
+			TotalSegments: totalSegments,
+			Data:          data[start:end],
+		}
+
+		TransactionMu.Lock()
+		transactionSegments[transactionID] = append(transactionSegments[transactionID], segment)
+		TransactionMu.Unlock()
+
+		log.Printf("🔄 Processed segment %d/%d for transaction %s", i+1, totalSegments, transactionID)
+	}
+
+	// Reconstruct transaction once all segments arrive
+	TransactionMu.Lock()
+	if len(transactionSegments[transactionID]) == totalSegments {
+		fullData := ""
+		for _, seg := range transactionSegments[transactionID] {
+			fullData += seg.Data
+		}
+
+		newTransaction := Transaction{
+			TransactionID: transactionID,
+			Source:        source,
+			Target:        target,
+			Data:          fullData,
+			Status:        "completed",
+		}
+
+		sourceBlock.Transactions = append(sourceBlock.Transactions, newTransaction)
+		transactionStatus[transactionID] = "completed"
+		delete(transactionSegments, transactionID) // Cleanup segments
+
+		log.Printf("✅ Transaction %s fully reconstructed and completed: Block %d → Block %d", transactionID, source, target)
+	} else {
+		transactionStatus[transactionID] = "in-progress"
+	}
+	TransactionMu.Unlock()
 }
 
 // Process running Docker containers and add them to the blockchain
@@ -113,6 +196,7 @@ func runAPIServer(cli *client.Client) {
 	r.GET("/blockchain", getBlockchain)
 	r.GET("/blockchain/shard", getShardBlockchain)
 	r.GET("/transactionStatus/:transactionID", checkTransactionStatus)
+	r.GET("/conflicts", getConflicts)
 
 	r.POST("/resetBlockchain", resetBlockchainHandler)
 	r.POST("/addBlock", addBlockHandler)
@@ -120,11 +204,11 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/addTransactionSegment", addTransactionSegmentHandler)
 	r.POST("/addTransaction", addTransactionHandler)
 	r.POST("/addParallelTransactions", addParallelTransactionsHandler)
-
-	r.GET("/conflicts", getConflicts)
+	r.POST("/assignNodesToShard", assignNodesToShardHandler)
+	r.POST("/shardTransactions", shardTransactionsHandler)
 
 	r.DELETE("/removeLastBlock", removeLastBlock)
-	r.POST("/assignNodesToShard", assignNodesToShardHandler)
+
 	// Start Server
 	srv := &http.Server{
 		Addr:    ":" + port,
@@ -320,8 +404,6 @@ func addParallelTransactions(c *gin.Context) {
 	})
 }
 
-
-
 func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction
 	if err := c.ShouldBindJSON(&transactions); err != nil {
@@ -357,49 +439,66 @@ func addParallelTransactionsHandler(c *gin.Context) {
 	})
 }
 
-// Process a transaction asynchronously
-func processTransaction(transactionID string, source, target int, data string) {
-	// Simulate processing delay
-	time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
-
-	// Lock blockchain
-	BlockchainMu.Lock()
-	defer BlockchainMu.Unlock()
-
-	// Find source block
-	var sourceBlock *Block
-	for i := range Blockchain {
-		if Blockchain[i].Index == source {
-			sourceBlock = &Blockchain[i]
-			break
-		}
+func shardTransactionsHandler(c *gin.Context) {
+	var req struct {
+		Transactions []ShardedTransaction `json:"transactions"`
 	}
 
-	// If source block doesn't exist
-	if sourceBlock == nil {
-		log.Printf("⚠️ Source block %d not found for transaction %s", source, transactionID)
-		TransactionMu.Lock()
-		transactionStatus[transactionID] = "failed"
-		TransactionMu.Unlock()
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
 
-	// Append transaction to source block
-	newTransaction := Transaction{
-		TransactionID: transactionID,
-		Source:        source,
-		Target:        target,
-		Data:          data,
+	if len(req.Transactions) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
+		return
 	}
 
-	sourceBlock.Transactions = append(sourceBlock.Transactions, newTransaction)
+	var wg sync.WaitGroup
+	transactionIDs := make([]string, 0)
+	mu := sync.Mutex{}
 
-	// Update transaction status
-	TransactionMu.Lock()
-	transactionStatus[transactionID] = "completed"
-	TransactionMu.Unlock()
+	// Iterate over the transactions
+	for _, tx := range req.Transactions {
+		txCopy := tx // ✅ Now txCopy is a proper copy of the defined struct
 
-	log.Printf("✅ Transaction %s completed: Block %d → Block %d", transactionID, source, target)
+		wg.Add(1)
+		go func(txCopy ShardedTransaction) { // ✅ Use the correct type in function argument
+			defer wg.Done()
+
+			for _, src := range txCopy.Source {
+				for _, tgt := range txCopy.Target {
+					transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+
+					TransactionMu.Lock()
+					TransactionPool[transactionID] = &Transaction{
+						Source:        src,
+						Target:        tgt,
+						Data:          txCopy.Data,
+						TransactionID: transactionID,
+						Status:        "pending",
+					}
+					TransactionMu.Unlock()
+
+					// Safely store transaction ID
+					mu.Lock()
+					transactionIDs = append(transactionIDs, transactionID)
+					mu.Unlock()
+
+					// Process transaction asynchronously
+					go processTransaction(transactionID, src, tgt, txCopy.Data)
+				}
+			}
+		}(txCopy) // ✅ Now it properly passes the copy
+	}
+
+	wg.Wait()
+
+	// Respond with transaction IDs
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":        "Sharded transactions are being processed",
+		"transactionIDs": transactionIDs,
+	})
 }
 
 func createShardHandler(c *gin.Context) {

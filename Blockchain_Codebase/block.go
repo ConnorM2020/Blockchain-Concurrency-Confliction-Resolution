@@ -37,6 +37,12 @@ type Transaction struct {
 	Status        string `json:"status"`
 }
 
+type ShardedTransaction struct {
+	Source []int  `json:"source"`
+	Target []int  `json:"target"`
+	Data   string `json:"data"`
+}
+
 // Handling concurrency
 type TransactionSegment struct {
 	TransactionID string `json:"transaction_id"`
@@ -58,11 +64,7 @@ var (
 	conflictsMu          sync.Mutex
 	Blockchain           []Block
 	BlockchainMu         sync.Mutex
-	transactionSegments  = make(map[string][]TransactionSegment)
 	transactionMu        sync.Mutex
-	// txQueue              = make(chan Transaction, 100)
-	// shardMutexes         [NumShards]sync.Mutex
-	// retryBackoff         = []time.Duration{100 * time.Millisecond, 500 * time.Millisecond, 1 * time.Second}
 )
 
 // Function to calculate hash for a block
@@ -121,6 +123,67 @@ func addBlock(containerID string) {
 	Blockchain = append(Blockchain, newBlock)
 	log.Printf("✅ Block added to blockchain (Shard %d): %+v", shardID, newBlock)
 }
+
+// func updatePeersHandler(c *gin.Context) {
+// 	var req struct {
+// 		TransactionIDs []string `json:"transactionIDs"`
+// 	}
+
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+// 		return
+// 	}
+
+// 	if len(req.TransactionIDs) == 0 {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
+// 		return
+// 	}
+
+// 	var wg sync.WaitGroup
+
+// 	for _, peer := range peerNodes {
+// 		wg.Add(1)
+// 		go func(peer string) {
+// 			defer wg.Done()
+// 			_, err := http.Post(peer+"/updateLedger", "application/json", bytes.NewBuffer([]byte(
+// 				fmt.Sprintf(`{"transactionIDs": %v}`, req.TransactionIDs),
+// 			)))
+// 			if err != nil {
+// 				fmt.Printf("❌ Failed to update peer %s: %s\n", peer, err)
+// 			} else {
+// 				fmt.Printf("✅ Successfully updated peer %s\n", peer)
+// 			}
+// 		}(peer)
+// 	}
+
+// 	wg.Wait()
+
+// 	c.JSON(http.StatusOK, gin.H{"message": "Peer nodes updated successfully."})
+// }
+
+// func updateLedgerHandler(c *gin.Context) {
+// 	var req struct {
+// 		TransactionIDs []string `json:"transactionIDs"`
+// 	}
+
+// 	if err := c.ShouldBindJSON(&req); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+// 		return
+// 	}
+
+// 	if len(req.TransactionIDs) == 0 {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
+// 		return
+// 	}
+
+// 	LedgerMu.Lock()
+// 	for _, txID := range req.TransactionIDs {
+// 		LedgerVersion[txID] = time.Now().UnixNano() // Store latest timestamp
+// 	}
+// 	LedgerMu.Unlock()
+
+// 	c.JSON(http.StatusOK, gin.H{"message": "Ledger updated successfully."})
+// }
 
 func addTransactionSegmentHandler(c *gin.Context) {
 	var segment TransactionSegment
