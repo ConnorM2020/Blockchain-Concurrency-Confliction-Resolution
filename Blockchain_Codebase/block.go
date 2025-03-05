@@ -30,8 +30,11 @@ type Transaction struct {
 	ContainerID   string `json:"container_id"`
 	Timestamp     string `json:"timestamp"`
 	TransactionID string `json:"transaction_id"`
+	Source        int    `json:"source"`
+	Target        int    `json:"target"`
 	Version       int    `json:"version"`
 	Data          string `json:"data"`
+	Status        string `json:"status"`
 }
 
 // Handling concurrency
@@ -102,13 +105,13 @@ func addBlock(containerID string) {
 	}
 
 	timestamp := time.Now().Format(time.RFC3339)
-	shardID := getShardID(containerID) // Ensure shard assignment
+	shardID := getShardID(containerID) // Assign correct shard
 
 	newBlock := Block{
 		Index:        len(Blockchain),
 		Timestamp:    timestamp,
 		ContainerID:  containerID,
-		Transactions: []Transaction{}, // Initially empty
+		Transactions: make([]Transaction, 0), // Ensure it's initialized
 		PreviousHash: previousHash,
 		Hash:         calculateHash(len(Blockchain), timestamp, []Transaction{}, previousHash),
 		Version:      version,
@@ -133,44 +136,42 @@ func addTransactionSegmentHandler(c *gin.Context) {
 
 	// Check if all segments have arrived
 	if len(transactionSegments[segment.TransactionID]) == segment.TotalSegments {
-		// Reconstruct full transaction
+		// Reconstruct full transaction data
 		fullData := ""
 		for _, seg := range transactionSegments[segment.TransactionID] {
 			fullData += seg.Data
 		}
 
-		// Ensure blockchain is not empty before appending
+		// Ensure blockchain has at least one block
 		if len(Blockchain) == 0 {
 			log.Println("⚠️ Blockchain is empty, initializing genesis block.")
-			addBlock("genesis") // Create the first block if none exist
+			addBlock("genesis")
 		}
 
-		// Add full transaction to blockchain
+		// Append transaction to the latest block
 		newTransaction := Transaction{
 			ContainerID:   segment.TransactionID,
 			Timestamp:     time.Now().Format(time.RFC3339),
 			TransactionID: segment.TransactionID,
-			Version:       len(Blockchain), // Increment transaction version
+			Version:       len(Blockchain),
 			Data:          fullData,
+			Status:        "completed",
 		}
 
-		// Append transaction safely
 		BlockchainMu.Lock()
 		Blockchain[len(Blockchain)-1].Transactions = append(Blockchain[len(Blockchain)-1].Transactions, newTransaction)
 		BlockchainMu.Unlock()
 
-		// Log success
+		// Log transaction completion
 		log.Printf("✅ Transaction fully assembled: %s", fullData)
 
-		// Delete stored segments only after response
+		// Remove stored transaction segments after successful assembly
 		delete(transactionSegments, segment.TransactionID)
 
-		// Send API response
 		c.JSON(http.StatusOK, gin.H{"message": "Transaction successfully completed"})
 		return
 	}
 
-	// Log received segment
 	log.Printf("🔄 Received segment %d/%d for transaction %s", segment.SegmentIndex+1, segment.TotalSegments, segment.TransactionID)
 	c.JSON(http.StatusOK, gin.H{"message": "Segment received"})
 }
@@ -178,16 +179,21 @@ func addTransactionSegmentHandler(c *gin.Context) {
 func displayBlockchain() {
 	fmt.Println("\n📜 Blockchain:")
 	for _, block := range Blockchain {
-		fmt.Printf("---------------------------\n")
+		fmt.Println("---------------------------")
 		fmt.Printf("📌 Index: %d\n", block.Index)
 		fmt.Printf("📦 ContainerID: %s\n", block.ContainerID)
 		fmt.Printf("🔗 Hash: %s\n", block.Hash)
 		fmt.Printf("🔗 Previous Hash: %s\n", block.PreviousHash)
 		fmt.Printf("🆕 Version: %d\n", block.Version)
 		fmt.Printf("📜 Transactions:\n")
-		for _, tx := range block.Transactions {
-			fmt.Printf("   - ContainerID: %s | Timestamp: %s | TxID: %s | Version: %d\n", tx.ContainerID, tx.Timestamp, tx.TransactionID, tx.Version)
+		if len(block.Transactions) == 0 {
+			fmt.Println("   ❌ No Transactions")
+		} else {
+			for _, tx := range block.Transactions {
+				fmt.Printf("   - TxID: %s | Source: %d → Target: %d | Data: %s | Status: %s\n",
+					tx.TransactionID, tx.Source, tx.Target, tx.Data, tx.Status)
+			}
 		}
-		fmt.Printf("---------------------------\n")
+		fmt.Println("---------------------------")
 	}
 }
