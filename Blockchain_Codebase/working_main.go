@@ -56,7 +56,6 @@ func init() {
 	flag.BoolVar(&process, "process", false, "Process containers and add to blockchain")
 	flag.BoolVar(&server, "server", false, "Run REST API server for inspecting containers")
 	flag.Parse()
-
 	initShards() // Ensure sharding system is initialized
 }
 
@@ -205,7 +204,6 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/addParallelTransactions", addParallelTransactionsHandler)
 	r.POST("/assignNodesToShard", assignNodesToShardHandler)
 	r.POST("/shardTransactions", shardTransactionsHandler)
-
 	r.DELETE("/removeLastBlock", removeLastBlock)
 
 	// Start Server
@@ -517,7 +515,6 @@ func createShardHandler(c *gin.Context) {
 			}
 		}
 	}
-
 	log.Printf("✅ New shard created with nodes: %v", reqBody.Nodes)
 	c.JSON(http.StatusOK, gin.H{"message": "Shard created successfully"})
 }

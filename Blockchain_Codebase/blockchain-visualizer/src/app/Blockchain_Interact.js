@@ -522,18 +522,20 @@ export default function SpiderWebView() {
             ))}
           </select>
 
-          {/* Checkboxes for selecting nodes */}
+          {/* Checkboxes for selecting blocks (excluding shards) */}
           <div className="max-h-40 overflow-y-auto border p-2 rounded bg-gray-700">
-            {nodes.map((node) => (
-              <label key={node.id} className="flex items-center space-x-2 mb-2">
-                <input
-                  type="checkbox"
-                  checked={selectedNodes.includes(Number(node.id))}
-                  onChange={() => toggleNodeSelection(node.id)}
-                />
-                <span>{node.data.label}</span>
-              </label>
-            ))}
+            {nodes
+              .filter(node => !node.data.label.includes("Shard")) // Exclude shard names
+              .map((node) => (
+                <label key={node.id} className="flex items-center space-x-2 mb-2">
+                  <input
+                    type="checkbox"
+                    checked={selectedNodes.includes(Number(node.id))}
+                    onChange={() => toggleNodeSelection(node.id)}
+                  />
+                  <span>{node.data.label}</span>
+                </label>
+              ))}
           </div>
 
           <div className="flex justify-between mt-4">
