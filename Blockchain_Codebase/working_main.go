@@ -121,7 +121,6 @@ func processTransaction(transactionID string, source int, target int, data strin
 		for _, seg := range transactionSegments[transactionID] {
 			fullData += seg.Data
 		}
-
 		newTransaction := Transaction{
 			TransactionID: transactionID,
 			Source:        source,
