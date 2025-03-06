@@ -168,66 +168,98 @@ export default function SpiderWebView() {
       console.error("❌ Error updating peers:", error);
     }
   };
-  
-  const formatSpiderWebData = (blocks) => {
-    let newNodes = [];
-    let newEdges = [];
-    let shardMap = {};
+    const formatSpiderWebData = (blocks) => {
+      let newNodes = [];
+      let newEdges = [];
+      let shardMap = {};
 
-    blocks.forEach((block) => {
-      if (!shardMap[block.shard_id]) {
-        shardMap[block.shard_id] = [];
-      }
-      shardMap[block.shard_id].push(block);
-    });
-
-    let shardColors = [
-      "#FF5733", "#33FF57", "#3385FF", "#FF33A1", "#FFAA33", "#AA33FF",
-      "#33FFAA", "#FF3333", "#33A1FF", "#A1FF33", "#FF33FF", "#FFA133"
-    ];
-
-    Object.entries(shardMap).forEach(([shardId, shardBlocks], index) => {
-      let angleStep = (2 * Math.PI) / shardBlocks.length;
-      let radius = 150 + shardBlocks.length * 10;
-
-      shardBlocks.forEach((block, i) => {
-        let x = 400 + Math.cos(angleStep * i) * radius + index * 400;
-        let y = 300 + Math.sin(angleStep * i) * radius;
-
-        let shardIndex = parseInt(block.shard_id) || 0;
-        let assignedColor = shardColors[shardIndex % shardColors.length];
-
-        newNodes.push({
-          id: block.index.toString(),
-          data: { label: `Block ${block.index}`, ...block },
-          position: { x, y },
-          style: {
-            background: assignedColor,
-            color: "#fff",
-            borderRadius: "5px",
-            padding: "10px",
-            cursor: "pointer",
-            border: selectedNodes.includes(block.index) ? "3px solid yellow" : "none",
-          },
-          draggable: true,
-        });
-
-        if (block.previous_hash !== "0") {
-          newEdges.push({
-            id: `e${block.index}`,
-            source: (block.index - 1).toString(),
-            target: block.index.toString(),
-            animated: true,
-            style: { stroke: "#999" },
-          });
-        }
+      blocks.forEach((block) => {
+          if (!shardMap[block.shard_id]) {
+              shardMap[block.shard_id] = [];
+          }
+          shardMap[block.shard_id].push(block);
       });
-    });
 
-    setNodes(newNodes);
-    setEdges(newEdges);
+      let shardColors = [
+          "rgba(255, 87, 51, 0.3)",  // Light red
+          "rgba(51, 255, 87, 0.3)",  // Light green
+          "rgba(51, 133, 255, 0.3)", // Light blue
+          "rgba(239, 239, 8, 0.3)", // Light yellow
+          "rgba(61, 10, 228, 0.3)"  // Light purpose
+      ];
+
+      let shardBubbles = [];
+
+      Object.entries(shardMap).forEach(([shardId, shardBlocks], index) => {
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          let angleStep = (2 * Math.PI) / shardBlocks.length;
+          let radius = 150 + shardBlocks.length * 10;
+
+          shardBlocks.forEach((block, i) => {
+              let x = 400 + Math.cos(angleStep * i) * radius + index * 400;
+              let y = 300 + Math.sin(angleStep * i) * radius;
+
+              let shardIndex = parseInt(block.shard_id) || 0;
+              let assignedColor = shardColors[shardIndex % shardColors.length];
+
+              newNodes.push({
+                  id: block.index.toString(),
+                  data: { label: `Block ${block.index}`, ...block },
+                  position: { x, y },
+                  style: {
+                      background: assignedColor.replace("0.3", "1"), // Solid for node
+                      color: "#fff",
+                      borderRadius: "5px",
+                      padding: "10px",
+                      cursor: "pointer",
+                      border: "none",
+                  },
+                  draggable: true,
+              });
+
+              // Track bounding box
+              minX = Math.min(minX, x);
+              minY = Math.min(minY, y);
+              maxX = Math.max(maxX, x);
+              maxY = Math.max(maxY, y);
+
+              if (block.previous_hash !== "0") {
+                  newEdges.push({
+                      id: `e${block.index}`,
+                      source: (block.index - 1).toString(),
+                      target: block.index.toString(),
+                      animated: true,
+                      style: { stroke: "#999" },
+                  });
+              }
+          });
+
+          // Create a bounding box for each shard
+          let width = maxX - minX + 50;
+          let height = maxY - minY + 50;
+
+          shardBubbles.push({
+              id: `shard-${shardId}`,
+              position: { x: minX - 25, y: minY - 25 },
+              data: { label: `Shard ${shardId}` },
+              style: {
+                  width: width,
+                  height: height,
+                  background: shardColors[shardId % shardColors.length],
+                  borderRadius: "50%",
+                  position: "absolute",
+                  zIndex: -1,
+              },
+              type: "shardBubble",
+              draggable: false,
+          });
+      });
+
+      setNodes([...shardBubbles, ...newNodes]);
+      setEdges(newEdges);
   };
 
+  
   const handleNodeClick = (event, node) => {
     if (!sourceNode) {
       setSourceNode(node);
@@ -237,7 +269,7 @@ export default function SpiderWebView() {
     }
   };
   const toggleNodeSelection = (nodeId) => {
-    const numericNodeId = Number(nodeId); // Ensure nodeId is treated as a number
+    const numericNodeId = Number(nodeId); // Ensure nodeId is a number
     setSelectedNodes((prev) =>
       prev.includes(numericNodeId)
         ? prev.filter((id) => id !== numericNodeId) // Remove if already selected
@@ -496,7 +528,7 @@ export default function SpiderWebView() {
               <label key={node.id} className="flex items-center space-x-2 mb-2">
                 <input
                   type="checkbox"
-                  checked={selectedNodes.includes(node.id)}
+                  checked={selectedNodes.includes(Number(node.id))}
                   onChange={() => toggleNodeSelection(node.id)}
                 />
                 <span>{node.data.label}</span>
