@@ -1,6 +1,7 @@
 package main
 
 import (
+	"blockchain/blockchain_test"
 	"context"
 	"flag"
 	"fmt"
@@ -582,20 +583,54 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
-	// Process containers if `--process` flag is passed
+	// Check if `--process` flag is passed and process containers
 	if process {
 		log.Println("📦 Processing containers...")
 		processContainers(cli)
 	}
 
-	// Start REST API server if `--server` flag is passed
-	if server {
-		go runAPIServer(cli) // Run API server in a separate goroutine
-	}
+	// Always start the REST API so React frontend can access blockchain data
+	log.Println("🚀 Starting Blockchain REST API on localhost:8080...")
+	go runAPIServer(cli) // Run API server in a separate goroutine
+
+	// Run Interactive CLI Execution
+	go func() {
+		for {
+			fmt.Println("\nBlockchain Execution Options:")
+			fmt.Println("[1] Run Sharded Transactions")
+			fmt.Println("[2] Run Non-Sharded Transactions")
+			fmt.Println("[3] Run Stress Test")
+			fmt.Println("[4] Exit")
+			fmt.Print("> ")
+
+			var choice int
+			_, err := fmt.Scanln(&choice)
+			if err != nil {
+				fmt.Println("⚠️ Invalid input. Please enter a number (1-4).")
+				continue
+			}
+
+			switch choice {
+			case 1:
+				fmt.Println("⚡ Running Sharded Transactions...")
+				blockchain_test.ProcessSharded(10, 4)
+			case 2:
+				fmt.Println("📜 Running Non-Sharded Transactions...")
+				blockchain_test.ProcessNonSharded(10)
+			case 3:
+				fmt.Println("🚀 Running Blockchain Stress Test...")
+				blockchain_test.RunStressTest()
+			case 4:
+				fmt.Println("Exiting interactive mode...")
+				return
+			default:
+				fmt.Println("⚠️ Invalid choice. Please select a valid option.")
+			}
+		}
+	}()
 
 	// Wait for termination signal
 	<-quit
 	log.Println("🛑 Shutting down gracefully...")
-
 	log.Println("✅ Server stopped successfully.")
 }
