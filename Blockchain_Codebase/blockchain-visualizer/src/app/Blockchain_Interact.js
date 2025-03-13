@@ -45,7 +45,6 @@ export default function SpiderWebView() {
     }
   };
 
-  
   const sendTransaction = async () => {
     if (!sourceNode || !targetNode || !transactionData.trim()) {
       alert("Please enter valid transaction data.");
@@ -386,7 +385,7 @@ export default function SpiderWebView() {
   return (
     <ReactFlowProvider>
       <div className="w-screen h-screen flex flex-col items-center bg-black text-white">
-        <h1 className="text-3xl font-bold text-center mt-4">Spider-Web Blockchain View</h1>
+      
   
         <div className="flex space-x-4 mt-2">
           <button onClick={fetchBlockchain} className="px-4 py-2 bg-blue-600 text-white rounded">

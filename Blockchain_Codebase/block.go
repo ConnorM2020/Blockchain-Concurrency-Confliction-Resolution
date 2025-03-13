@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"sync"
 	"time"
-
+	"strings"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,6 +35,8 @@ type Transaction struct {
 	Version       int    `json:"version"`
 	Data          string `json:"data"`
 	Status        string `json:"status"`
+	Type          string  `json:"type"`       
+	ExecTime      float64 `json:"execTime"`
 }
 
 type ShardedTransaction struct {
@@ -77,19 +79,23 @@ func calculateHash(index int, timestamp string, transactions []Transaction, prev
 
 // Assigns a transaction to a shard based on organization
 func getShardID(containerID string) int {
-	if len(containerID) < 2 {
-		return 0 // Default to shard 0 if ID is too short
+	
+	if len(containerID) < 4 {
+		return 0 
 	}
-	// containerID starts with `org1` or `org2`
-	if containerID[:4] == "org1" {
+
+	// ✅ Use prefix matching safely
+	if strings.HasPrefix(containerID, "org1") {
 		return 0 // Shard 0 for Org1
-	} else if containerID[:4] == "org2" {
+	} else if strings.HasPrefix(containerID, "org2") {
 		return 1 // Shard 1 for Org2
 	}
-	// Default fallback: Use hash-based assignment if unknown prefix
+
+	// ✅ Default fallback: Use a hash-based assignment if prefix is unknown
 	hash := sha256.Sum256([]byte(containerID))
 	return int(hash[0]) % NumShards
 }
+
 
 func addBlock(containerID string) {
 	BlockchainMu.Lock()
@@ -124,66 +130,6 @@ func addBlock(containerID string) {
 	log.Printf("✅ Block added to blockchain (Shard %d): %+v", shardID, newBlock)
 }
 
-// func updatePeersHandler(c *gin.Context) {
-// 	var req struct {
-// 		TransactionIDs []string `json:"transactionIDs"`
-// 	}
-
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
-// 		return
-// 	}
-
-// 	if len(req.TransactionIDs) == 0 {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
-// 		return
-// 	}
-
-// 	var wg sync.WaitGroup
-
-// 	for _, peer := range peerNodes {
-// 		wg.Add(1)
-// 		go func(peer string) {
-// 			defer wg.Done()
-// 			_, err := http.Post(peer+"/updateLedger", "application/json", bytes.NewBuffer([]byte(
-// 				fmt.Sprintf(`{"transactionIDs": %v}`, req.TransactionIDs),
-// 			)))
-// 			if err != nil {
-// 				fmt.Printf("❌ Failed to update peer %s: %s\n", peer, err)
-// 			} else {
-// 				fmt.Printf("✅ Successfully updated peer %s\n", peer)
-// 			}
-// 		}(peer)
-// 	}
-
-// 	wg.Wait()
-
-// 	c.JSON(http.StatusOK, gin.H{"message": "Peer nodes updated successfully."})
-// }
-
-// func updateLedgerHandler(c *gin.Context) {
-// 	var req struct {
-// 		TransactionIDs []string `json:"transactionIDs"`
-// 	}
-
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
-// 		return
-// 	}
-
-// 	if len(req.TransactionIDs) == 0 {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
-// 		return
-// 	}
-
-// 	LedgerMu.Lock()
-// 	for _, txID := range req.TransactionIDs {
-// 		LedgerVersion[txID] = time.Now().UnixNano() // Store latest timestamp
-// 	}
-// 	LedgerMu.Unlock()
-
-// 	c.JSON(http.StatusOK, gin.H{"message": "Ledger updated successfully."})
-// }
 
 func addTransactionSegmentHandler(c *gin.Context) {
 	var segment TransactionSegment

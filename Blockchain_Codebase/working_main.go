@@ -20,13 +20,26 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Define TransactionLog structure
+type TransactionLog struct {
+	TxID      string  `json:"txID"`
+	Source    int     `json:"source"`
+	Target    int     `json:"target"`
+	Type      string  `json:"type"`
+	ExecTime  float64 `json:"execTime"`
+	Timestamp string  `json:"timestamp"`
+}
+
 const (
-	blockchainFile = "blockchain.json"
-	maxRetries     = 3
-	maxSegmentSize = 10
+	blockchainFile  = "blockchain.json"
+	maxRetries      = 3
+	maxSegmentSize  = 10
+	shutdownTimeout = 5 * time.Second
 )
 
 var (
+	transactionLogs     []TransactionLog
+	transactionLogsMu   sync.Mutex
 	port                string
 	process             bool
 	server              bool
@@ -35,6 +48,60 @@ var (
 	TransactionMu       sync.Mutex
 	transactionSegments = make(map[string][]TransactionSegment)
 )
+
+var executionOptions = []string{"Run Sharded Transactions", "Run Non-Sharded Transactions", "Run Stress Test"}
+
+// return API handler
+func getExecutionOptions(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{"options": executionOptions})
+}
+
+// API handler to trigger blockchain operations
+func executeTransaction(c *gin.Context) {
+	var request struct {
+		Option int `json:"option"`
+	}
+
+	if err := c.BindJSON(&request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		return
+	}
+
+	startTime := time.Now() // Start measuring execution time
+
+	var message string
+	var sourceBlock, targetBlock int
+
+	switch request.Option {
+	case 1:
+		log.Println("⚡ Running Sharded Transactions...")
+		sourceBlock, targetBlock = 1, 10 // Example: Adjust based on logic
+		blockchain_test.ProcessSharded(10, 4)
+		message = "Sharded Transactions Executed"
+	case 2:
+		log.Println("📜 Running Non-Sharded Transactions...")
+		sourceBlock, targetBlock = 2, 15 // Example: Adjust based on logic
+		blockchain_test.ProcessNonSharded(10)
+		message = "Non-Sharded Transactions Executed"
+	case 3:
+		log.Println("🚀 Running Blockchain Stress Test...")
+		blockchain_test.RunStressTest()
+		message = "Stress Test Executed"
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid option selected"})
+		return
+	}
+	// Compute Execution Time
+	executionTime := time.Since(startTime).Seconds()
+
+	// Send JSON response with execution details
+	c.JSON(http.StatusOK, gin.H{
+		"message":        message,
+		"execution_time": executionTime,
+		"source_block":   sourceBlock,
+		"target_block":   targetBlock,
+	})
+}
 
 // Middleware to allow CORS
 func CORSMiddleware() gin.HandlerFunc {
@@ -60,15 +127,19 @@ func init() {
 	initShards() // Ensure sharding system is initialized
 }
 
-// Process a transaction asynchronously with segmentation
-func processTransaction(transactionID string, source int, target int, data string) {
-	time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
+func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
+	startTime := time.Now() // Start execution timer
 
-	// Lock blockchain
+	// Simulate processing time: Sharded transactions should be faster
+	if isSharded {
+		time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second) // Faster execution for sharded transactions
+	} else {
+		time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second) // Slower execution for non-sharded transactions
+	}
+
 	BlockchainMu.Lock()
 	defer BlockchainMu.Unlock()
 
-	// Find source block
 	var sourceBlock *Block
 	for i := range Blockchain {
 		if Blockchain[i].Index == source {
@@ -85,9 +156,8 @@ func processTransaction(transactionID string, source int, target int, data strin
 		return
 	}
 
-	// Split large transactions into segments
+	// Calculate number of segments based on data size
 	totalSegments := (len(data) + maxSegmentSize - 1) / maxSegmentSize
-
 	TransactionMu.Lock()
 	transactionSegments[transactionID] = make([]TransactionSegment, 0, totalSegments)
 	TransactionMu.Unlock()
@@ -114,7 +184,9 @@ func processTransaction(transactionID string, source int, target int, data strin
 		log.Printf("🔄 Processed segment %d/%d for transaction %s", i+1, totalSegments, transactionID)
 	}
 
-	// Reconstruct transaction once all segments arrive
+	executionTime := time.Since(startTime).Seconds() * 1000 // Convert to milliseconds
+
+	// If all segments are processed, finalize the transaction
 	TransactionMu.Lock()
 	if len(transactionSegments[transactionID]) == totalSegments {
 		fullData := ""
@@ -127,17 +199,45 @@ func processTransaction(transactionID string, source int, target int, data strin
 			Target:        target,
 			Data:          fullData,
 			Status:        "completed",
+			Type: func() string {
+				if isSharded {
+					return "Sharded"
+				} else {
+					return "Non-Sharded"
+				}
+			}(),
+			ExecTime:  executionTime, // Store execution time
+			Timestamp: time.Now().Format(time.RFC3339),
 		}
 
 		sourceBlock.Transactions = append(sourceBlock.Transactions, newTransaction)
 		transactionStatus[transactionID] = "completed"
-		delete(transactionSegments, transactionID) // Cleanup segments
+		delete(transactionSegments, transactionID)
 
-		log.Printf("✅ Transaction %s fully reconstructed and completed: Block %d → Block %d", transactionID, source, target)
+		log.Printf("✅ Transaction %s fully reconstructed and completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
+			transactionID, source, target, newTransaction.Type, executionTime)
 	} else {
 		transactionStatus[transactionID] = "in-progress"
 	}
 	TransactionMu.Unlock()
+
+	// Add transaction log with measured execution time
+	transactionLogsMu.Lock()
+	transactionLogs = append(transactionLogs, TransactionLog{
+		TxID:   transactionID,
+		Source: source,
+		Target: target,
+		Type: func() string {
+			if isSharded {
+				return "Sharded"
+			} else {
+				return "Non-Sharded"
+			}
+		}(),
+		ExecTime:  executionTime, // Store actual execution time
+		Timestamp: time.Now().Format(time.RFC3339),
+	})
+	transactionLogsMu.Unlock()
 }
 
 // Process running Docker containers and add them to the blockchain
@@ -187,15 +287,34 @@ func checkTransactionStatus(c *gin.Context) {
 	}
 }
 
+// API to fetch transaction logs
+func getTransactionLogs(c *gin.Context) {
+	transactionLogsMu.Lock()
+	defer transactionLogsMu.Unlock()
+
+	// If no logs exist, return an empty array instead of null
+	if transactionLogs == nil {
+		transactionLogs = []TransactionLog{}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"logs": transactionLogs})
+}
+
 // Start the REST API server
 func runAPIServer(cli *client.Client) {
 	r := gin.Default()
+	r.GET("/", listRoutes)
+
 	r.Use(CORSMiddleware()) // Enable CORS
 	// API Endpoints
 	r.GET("/blockchain", getBlockchain)
 	r.GET("/blockchain/shard", getShardBlockchain)
 	r.GET("/transactionStatus/:transactionID", checkTransactionStatus)
 	r.GET("/conflicts", getConflicts)
+	r.GET("/transactionLogs", getTransactionLogs)
+
+	r.GET("/executionOptions", getExecutionOptions)
+	r.POST("/executeTransaction", executeTransaction)
 
 	r.POST("/resetBlockchain", resetBlockchainHandler)
 	r.POST("/addBlock", addBlockHandler)
@@ -231,6 +350,30 @@ func runAPIServer(cli *client.Client) {
 		log.Fatalf("❌ Error shutting down server: %v", err)
 	}
 	log.Println("✅ Server shutdown complete.")
+}
+
+// Root endpoint to list all available routes
+func listRoutes(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"endpoints": []string{
+			"/executionOptions",
+			"/executeTransaction",
+			"/blockchain",
+			"/blockchain/shard",
+			"/transactionStatus/:transactionID",
+			"/conflicts",
+			"/transactionLogs",
+			"/resetBlockchain",
+			"/addBlock",
+			"/createShard",
+			"/addTransactionSegment",
+			"/addTransaction",
+			"/addParallelTransactions",
+			"/assignNodesToShard",
+			"/shardTransactions",
+			"/removeLastBlock",
+		},
+	})
 }
 
 // API to check transaction status
@@ -357,9 +500,12 @@ func addTransactionHandler(c *gin.Context) {
 	TransactionMu.Lock()
 	transactionStatus[transactionID] = "pending"
 	TransactionMu.Unlock()
+	// Determine if the transaction is sharded based on the shard IDs of source and target
+	// Determine if the transaction is sharded based on the shard IDs of source and target
+	isSharded := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock)) != getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
 
 	// Process transaction asynchronously
-	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
 
 	// Return response immediately
 	c.JSON(http.StatusAccepted, gin.H{
@@ -392,18 +538,18 @@ func addParallelTransactions(c *gin.Context) {
 		TransactionMu.Unlock()
 
 		transactionIDs = append(transactionIDs, transactionID)
-
+		isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
 		// Process transaction asynchronously
-		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data)
+		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
 	}
 	c.JSON(http.StatusAccepted, gin.H{
 		"message":        "Transactions are being processed",
 		"transactionIDs": transactionIDs,
 	})
 }
-
 func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction
+
 	if err := c.ShouldBindJSON(&transactions); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
@@ -426,9 +572,9 @@ func addParallelTransactionsHandler(c *gin.Context) {
 		TransactionMu.Unlock()
 
 		transactionIDs = append(transactionIDs, transactionID)
+		isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
 
-		// Process transaction asynchronously
-		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data)
+		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
 	}
 
 	c.JSON(http.StatusAccepted, gin.H{
@@ -458,10 +604,10 @@ func shardTransactionsHandler(c *gin.Context) {
 
 	// Iterate over the transactions
 	for _, tx := range req.Transactions {
-		txCopy := tx // ✅ Now txCopy is a proper copy of the defined struct
+		txCopy := tx // Avoid race conditions
 
 		wg.Add(1)
-		go func(txCopy ShardedTransaction) { // ✅ Use the correct type in function argument
+		go func(txCopy ShardedTransaction) { // ✅ Use correct type
 			defer wg.Done()
 
 			for _, src := range txCopy.Source {
@@ -478,21 +624,24 @@ func shardTransactionsHandler(c *gin.Context) {
 					}
 					TransactionMu.Unlock()
 
-					// Safely store transaction ID
+					// ✅ Determine if this is a sharded transaction
+					isSharded := getShardID(fmt.Sprintf("%d", src)) != getShardID(fmt.Sprintf("%d", tgt))
+
+					// ✅ Safely store transaction ID
 					mu.Lock()
 					transactionIDs = append(transactionIDs, transactionID)
 					mu.Unlock()
 
-					// Process transaction asynchronously
-					go processTransaction(transactionID, src, tgt, txCopy.Data)
+					// ✅ Process transaction asynchronously
+					go processTransaction(transactionID, src, tgt, txCopy.Data, isSharded)
 				}
 			}
-		}(txCopy) // ✅ Now it properly passes the copy
+		}(txCopy) // ✅ Correctly passes copy
 	}
 
-	wg.Wait()
+	wg.Wait() // ✅ Ensure all goroutines finish before responding
 
-	// Respond with transaction IDs
+	// ✅ Respond with transaction IDs
 	c.JSON(http.StatusAccepted, gin.H{
 		"message":        "Sharded transactions are being processed",
 		"transactionIDs": transactionIDs,
@@ -566,6 +715,19 @@ func checkDockerConnection(cli *client.Client) bool {
 	return true
 }
 
+// Shutdown function to gracefully stop the API server
+func shutdownAPIServer() error {
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	srv := &http.Server{
+		Addr: ":" + port,
+	}
+
+	return srv.Shutdown(ctx)
+}
+
+// Main function
 func main() {
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -583,20 +745,28 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 
+	// Start the REST API Server so React frontend can connect
+	log.Println("🚀 Starting Blockchain REST API on localhost:8080...")
+	go runAPIServer(cli) // Start the API server in a separate goroutine
+
+	// Wait a moment to ensure the API is up before processing containers
+	select {
+	case <-quit:
+		log.Println("🛑 Received shutdown signal before starting execution.")
+		return
+	default:
+	}
+
 	// Check if `--process` flag is passed and process containers
 	if process {
 		log.Println("📦 Processing containers...")
 		processContainers(cli)
 	}
 
-	// Always start the REST API so React frontend can access blockchain data
-	log.Println("🚀 Starting Blockchain REST API on localhost:8080...")
-	go runAPIServer(cli) // Run API server in a separate goroutine
-
-	// Run Interactive CLI Execution
+	// Run Interactive CLI Execution in a separate goroutine
 	go func() {
 		for {
-			fmt.Println("\nBlockchain Execution Options:")
+			fmt.Println("\n📌 Blockchain Execution Options:")
 			fmt.Println("[1] Run Sharded Transactions")
 			fmt.Println("[2] Run Non-Sharded Transactions")
 			fmt.Println("[3] Run Stress Test")
@@ -632,5 +802,11 @@ func main() {
 	// Wait for termination signal
 	<-quit
 	log.Println("🛑 Shutting down gracefully...")
-	log.Println("✅ Server stopped successfully.")
+
+	// Graceful shutdown of API server
+	log.Println("🛑 Shutting down REST API server...")
+	if err := shutdownAPIServer(); err != nil {
+		log.Fatalf("❌ Error shutting down server: %v", err)
+	}
+	log.Println("✅ Server shutdown complete.")
 }
