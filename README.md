@@ -4,7 +4,8 @@ Go-Based backend code, paired with a Python front-end
 
 > Project Overview
 
-This project is a blockchain-based concurrency conflict resolution system designed to handle transaction conflicts efficiently. It integrates a Go-based backend for high-performance blockchain processing and a Python-based front-end for user interaction and visualization.
+This project is a blockchain-based concurrency conflict resolution system designed to handle transaction conflicts efficiently.  
+It integrates a Go-based backend for high-performance blockchain processing and a JavaScript (react) based front-end for user interaction and visualisation.
 
 > Project Structure
 
@@ -68,8 +69,6 @@ go run main.go
 cd Blockchain_Codebase/blockchain-visualizer
 npm install
 npm run dev
-
-(Include images of the system, architecture, or UI here)
 
 > **Contributors**
 ConnorM2020 
