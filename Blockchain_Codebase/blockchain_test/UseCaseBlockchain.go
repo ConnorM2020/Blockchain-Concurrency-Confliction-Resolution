@@ -31,7 +31,6 @@ func GenerateLargeData(size int) string {
 }
 
 // SendTransaction sends a transaction via HTTP POST
-// SendTransaction sends a transaction via HTTP POST
 func SendTransaction(wg *sync.WaitGroup, isSharded bool) {
 	if wg != nil {
 		defer wg.Done()

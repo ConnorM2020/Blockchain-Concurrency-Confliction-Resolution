@@ -398,9 +398,9 @@ func getTransactionStatus(c *gin.Context) {
 
 func addShardedTransactionHandler(c *gin.Context) {
 
-	c.JSON(http.StatusAccepted, gin.H{
-		"message": "Sharded transaction submitted for processing",
-	})
+    c.JSON(http.StatusAccepted, gin.H{
+        "message": "Sharded transaction submitted for processing",
+    }) 
 }
 
 // Assign multiple nodes to a specific shard
@@ -794,7 +794,7 @@ func main() {
 			switch choice {
 			case 1:
 				fmt.Println("⚡ Running Sharded Transactions...")
-
+				
 				blockchain_test.ProcessSharded(10, 4)
 			case 2:
 				fmt.Println("📜 Running Non-Sharded Transactions...")
