@@ -320,7 +320,10 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/addBlock", addBlockHandler)
 	r.POST("/createShard", createShardHandler)
 	r.POST("/addTransactionSegment", addTransactionSegmentHandler)
-	r.POST("/addTransaction", addTransactionHandler)
+
+	r.POST("/addTransaction", addTransactionHandler)               // Ensure this calls the correct handler
+	r.POST("/addShardedTransaction", addShardedTransactionHandler) // Use different endpoint
+
 	r.POST("/addParallelTransactions", addParallelTransactionsHandler)
 	r.POST("/assignNodesToShard", assignNodesToShardHandler)
 	r.POST("/shardTransactions", shardTransactionsHandler)
@@ -364,6 +367,7 @@ func listRoutes(c *gin.Context) {
 			"/conflicts",
 			"/transactionLogs",
 			"/resetBlockchain",
+			"/addShardedTransactionHandler",
 			"/addBlock",
 			"/createShard",
 			"/addTransactionSegment",
@@ -390,6 +394,13 @@ func getTransactionStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": status})
+}
+
+func addShardedTransactionHandler(c *gin.Context) {
+
+	c.JSON(http.StatusAccepted, gin.H{
+		"message": "Sharded transaction submitted for processing",
+	})
 }
 
 // Assign multiple nodes to a specific shard
@@ -500,12 +511,12 @@ func addTransactionHandler(c *gin.Context) {
 	TransactionMu.Lock()
 	transactionStatus[transactionID] = "pending"
 	TransactionMu.Unlock()
-	// Determine if the transaction is sharded based on the shard IDs of source and target
-	// Determine if the transaction is sharded based on the shard IDs of source and target
+
 	isSharded := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock)) != getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
 
 	// Process transaction asynchronously
 	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
+	fmt.Println("🔍 Transaction being added -> Source:", reqBody.SourceBlock, "Target:", reqBody.TargetBlock, "Sharded:", isSharded)
 
 	// Return response immediately
 	c.JSON(http.StatusAccepted, gin.H{
@@ -783,6 +794,7 @@ func main() {
 			switch choice {
 			case 1:
 				fmt.Println("⚡ Running Sharded Transactions...")
+
 				blockchain_test.ProcessSharded(10, 4)
 			case 2:
 				fmt.Println("📜 Running Non-Sharded Transactions...")

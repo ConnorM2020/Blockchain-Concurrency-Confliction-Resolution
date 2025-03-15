@@ -31,7 +31,8 @@ func GenerateLargeData(size int) string {
 }
 
 // SendTransaction sends a transaction via HTTP POST
-func SendTransaction(wg *sync.WaitGroup) {
+// SendTransaction sends a transaction via HTTP POST
+func SendTransaction(wg *sync.WaitGroup, isSharded bool) {
 	if wg != nil {
 		defer wg.Done()
 	}
@@ -48,7 +49,13 @@ func SendTransaction(wg *sync.WaitGroup) {
 		return
 	}
 
-	resp, err := http.Post(API_BASE+"/addTransaction", "application/json", bytes.NewBuffer(jsonData))
+	// ✅ Select the correct API endpoint
+	endpoint := "/addTransaction" // Default: Non-Sharded API
+	if isSharded {
+		endpoint = "/addShardedTransaction" // Use the Sharded API when necessary
+	}
+
+	resp, err := http.Post(API_BASE+endpoint, "application/json", bytes.NewBuffer(jsonData))
 	if err != nil {
 		fmt.Println("❌ Error sending request:", err)
 		return
@@ -56,9 +63,9 @@ func SendTransaction(wg *sync.WaitGroup) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusAccepted {
-		fmt.Println("✅ Transaction Sent Successfully")
+		fmt.Printf("✅ Transaction Sent Successfully to %s\n", endpoint)
 	} else {
-		fmt.Printf("❌ Error: Received status code %d\n", resp.StatusCode)
+		fmt.Printf("❌ Error: Received status code %d from %s\n", resp.StatusCode, endpoint)
 	}
 }
 
@@ -66,7 +73,7 @@ func SendTransaction(wg *sync.WaitGroup) {
 func ProcessNonSharded(numTransactions int) {
 	start := time.Now()
 	for i := 0; i < numTransactions; i++ {
-		SendTransaction(nil)
+		SendTransaction(nil, false)
 	}
 	duration := time.Since(start)
 	fmt.Printf("⏳ Non-Sharded Execution Time: %v\n", duration)
@@ -74,6 +81,7 @@ func ProcessNonSharded(numTransactions int) {
 
 // ProcessSharded executes transactions in parallel
 func ProcessSharded(numTransactions, numShards int) {
+	fmt.Println("⚡ [DEBUG] ProcessSharded() was called with transactions:", numTransactions, "shards:", numShards)
 	start := time.Now()
 	var wg sync.WaitGroup
 	shardSize := numTransactions / numShards
@@ -83,7 +91,7 @@ func ProcessSharded(numTransactions, numShards int) {
 		go func(shardID int) {
 			defer wg.Done()
 			for j := 0; j < shardSize; j++ {
-				SendTransaction(nil)
+				SendTransaction(nil, true)
 			}
 		}(i)
 	}
@@ -103,7 +111,7 @@ func RunStressTest() {
 
 	for i := 0; i < numTransactions; i++ {
 		wg.Add(1)
-		go SendTransaction(&wg)
+		go SendTransaction(&wg, false)
 	}
 
 	wg.Wait()
