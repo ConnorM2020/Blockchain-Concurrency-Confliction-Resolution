@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,15 +29,15 @@ type Block struct {
 
 // Define Transaction structure
 type Transaction struct {
-	ContainerID   string `json:"container_id"`
-	Timestamp     string `json:"timestamp"`
-	TransactionID string `json:"transaction_id"`
-	Source        int    `json:"source"`
-	Target        int    `json:"target"`
-	Version       int    `json:"version"`
-	Data          string `json:"data"`
-	Status        string `json:"status"`
-	Type          string  `json:"type"`       
+	ContainerID   string  `json:"container_id"`
+	Timestamp     string  `json:"timestamp"`
+	TransactionID string  `json:"transaction_id"`
+	Source        int     `json:"source"`
+	Target        int     `json:"target"`
+	Version       int     `json:"version"`
+	Data          string  `json:"data"`
+	Status        string  `json:"status"`
+	Type          string  `json:"type"`
 	ExecTime      float64 `json:"execTime"`
 }
 
@@ -77,23 +79,34 @@ func calculateHash(index int, timestamp string, transactions []Transaction, prev
 	return hex.EncodeToString(hash[:])
 }
 
-// Assigns a transaction to a shard based on organization
-func getShardID(containerID string) int {
-	
-	if len(containerID) < 4 {
-		return 0 
+func getShardID(containerStr string) int {
+	if len(containerStr) < 1 {
+		log.Printf("⚠️ Invalid containerID: '%s' (Too short)", containerStr)
+		return 0 // Default to shard 0 if ID is invalid
 	}
 
-	// ✅ Use prefix matching safely
-	if strings.HasPrefix(containerID, "org1") {
-		return 0 // Shard 0 for Org1
-	} else if strings.HasPrefix(containerID, "org2") {
-		return 1 // Shard 1 for Org2
+	// Explicit shard assignment based on organization prefix
+	switch {
+	case strings.HasPrefix(containerStr, "org1"):
+		log.Printf("✅ Assigned '%s' to Shard 0 (Org1)", containerStr)
+		return 0
+	case strings.HasPrefix(containerStr, "org2"):
+		log.Printf("✅ Assigned '%s' to Shard 1 (Org2)", containerStr)
+		return 1
 	}
 
-	// ✅ Default fallback: Use a hash-based assignment if prefix is unknown
-	hash := sha256.Sum256([]byte(containerID))
-	return int(hash[0]) % NumShards
+	// Handle numeric container IDs more evenly
+	if numID, err := strconv.Atoi(containerStr); err == nil {
+		shard := (numID / 2) % NumShards // Better even distribution
+		log.Printf("🔀 Assigned '%s' to Shard %d (Numeric ID)", containerStr, shard)
+		return shard
+	}
+
+	// Fallback: Hash-based assignment for unknown orgs
+	hash := sha256.Sum256([]byte(containerStr))
+	shard := int(hash[0]) % NumShards
+	log.Printf("🔀 Assigned '%s' to Shard %d (Fallback Hash)", containerStr, shard)
+	return shard
 }
 
 
@@ -129,7 +142,6 @@ func addBlock(containerID string) {
 	Blockchain = append(Blockchain, newBlock)
 	log.Printf("✅ Block added to blockchain (Shard %d): %+v", shardID, newBlock)
 }
-
 
 func addTransactionSegmentHandler(c *gin.Context) {
 	var segment TransactionSegment
