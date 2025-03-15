@@ -127,19 +127,37 @@ func init() {
 	initShards() // Ensure sharding system is initialized
 }
 
-func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
-	startTime := time.Now() // Start execution timer
+func processTransaction(transactionID string, source int, target int, data string, expectedSharded bool) {
+	startTime := time.Now()
 
-	// Simulate processing time: Sharded transactions should be faster
+	// Verify actual shard assignments
+	sourceShard := getShardID(fmt.Sprintf("%d", source))
+	targetShard := getShardID(fmt.Sprintf("%d", target))
+	isSharded := sourceShard != targetShard // Correct dynamic check
+
+	// Log correct classification
+	log.Printf("🔍 Processing Transaction: %s | Source: %d (Shard %d) → Target: %d (Shard %d) | Actual Sharded: %v",
+		transactionID, source, sourceShard, target, targetShard, isSharded)
+
+	// If a transaction was expected to be sharded but isn't, adjust the target
+	if expectedSharded && !isSharded {
+		log.Printf("⚠️ Mismatch! Expected sharded but assigned same shard. Adjusting target...")
+		target = (target + 1) % 10 // Adjust target to ensure different shard
+		targetShard = getShardID(fmt.Sprintf("%d", target))
+		isSharded = sourceShard != targetShard
+	}
+
+	// Simulate processing time
 	if isSharded {
-		time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second) // Faster execution for sharded transactions
+		time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second)
 	} else {
-		time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second) // Slower execution for non-sharded transactions
+		time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second)
 	}
 
 	BlockchainMu.Lock()
 	defer BlockchainMu.Unlock()
 
+	// Find the source block
 	var sourceBlock *Block
 	for i := range Blockchain {
 		if Blockchain[i].Index == source {
@@ -147,46 +165,51 @@ func processTransaction(transactionID string, source int, target int, data strin
 			break
 		}
 	}
-
 	if sourceBlock == nil {
-		log.Printf("⚠️ Source block %d not found for transaction %s", source, transactionID)
+		log.Printf("❌ ERROR: Source block %d not found for transaction %s", source, transactionID)
 		TransactionMu.Lock()
 		transactionStatus[transactionID] = "failed"
 		TransactionMu.Unlock()
 		return
 	}
-
-	// Calculate number of segments based on data size
+	// Segmenting transaction data
 	totalSegments := (len(data) + maxSegmentSize - 1) / maxSegmentSize
 	TransactionMu.Lock()
 	transactionSegments[transactionID] = make([]TransactionSegment, 0, totalSegments)
 	TransactionMu.Unlock()
 
+	// Process transaction segments in parallel
+	var wg sync.WaitGroup
 	for i := 0; i < totalSegments; i++ {
-		start := i * maxSegmentSize
-		end := start + maxSegmentSize
-		if end > len(data) {
-			end = len(data)
-		}
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			start := i * maxSegmentSize
+			end := start + maxSegmentSize
+			if end > len(data) {
+				end = len(data)
+			}
 
-		segment := TransactionSegment{
-			TransactionID: transactionID,
-			ShardID:       getShardID(fmt.Sprintf("%d", source)),
-			SegmentIndex:  i,
-			TotalSegments: totalSegments,
-			Data:          data[start:end],
-		}
+			segment := TransactionSegment{
+				TransactionID: transactionID,
+				ShardID:       sourceShard,
+				SegmentIndex:  i,
+				TotalSegments: totalSegments,
+				Data:          data[start:end],
+			}
 
-		TransactionMu.Lock()
-		transactionSegments[transactionID] = append(transactionSegments[transactionID], segment)
-		TransactionMu.Unlock()
+			TransactionMu.Lock()
+			transactionSegments[transactionID] = append(transactionSegments[transactionID], segment)
+			TransactionMu.Unlock()
 
-		log.Printf("🔄 Processed segment %d/%d for transaction %s", i+1, totalSegments, transactionID)
+			log.Printf("🔄 Processed segment %d/%d for transaction %s", i+1, totalSegments, transactionID)
+		}(i)
 	}
+	wg.Wait()
 
-	executionTime := time.Since(startTime).Seconds() * 1000 // Convert to milliseconds
+	executionTime := time.Since(startTime).Seconds() * 1000 // Convert to ms
 
-	// If all segments are processed, finalize the transaction
+	// Finalizing the transaction
 	TransactionMu.Lock()
 	if len(transactionSegments[transactionID]) == totalSegments {
 		fullData := ""
@@ -202,11 +225,10 @@ func processTransaction(transactionID string, source int, target int, data strin
 			Type: func() string {
 				if isSharded {
 					return "Sharded"
-				} else {
-					return "Non-Sharded"
 				}
+				return "Non-Sharded"
 			}(),
-			ExecTime:  executionTime, // Store execution time
+			ExecTime:  executionTime,
 			Timestamp: time.Now().Format(time.RFC3339),
 		}
 
@@ -214,27 +236,23 @@ func processTransaction(transactionID string, source int, target int, data strin
 		transactionStatus[transactionID] = "completed"
 		delete(transactionSegments, transactionID)
 
-		log.Printf("✅ Transaction %s fully reconstructed and completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
+		log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
 			transactionID, source, target, newTransaction.Type, executionTime)
 	} else {
 		transactionStatus[transactionID] = "in-progress"
 	}
 	TransactionMu.Unlock()
-
-	// Add transaction log with measured execution time
+	// Logging the transaction
 	transactionLogsMu.Lock()
+	transactionType := map[bool]string{true: "Sharded", false: "Non-Sharded"}[isSharded]
+	log.Printf("📝 Adding to Transaction Logs: ID=%s, Type=%s", transactionID, transactionType)
+
 	transactionLogs = append(transactionLogs, TransactionLog{
-		TxID:   transactionID,
-		Source: source,
-		Target: target,
-		Type: func() string {
-			if isSharded {
-				return "Sharded"
-			} else {
-				return "Non-Sharded"
-			}
-		}(),
-		ExecTime:  executionTime, // Store actual execution time
+		TxID:      transactionID,
+		Source:    source,
+		Target:    target,
+		Type:      transactionType,
+		ExecTime:  executionTime,
 		Timestamp: time.Now().Format(time.RFC3339),
 	})
 	transactionLogsMu.Unlock()
@@ -292,9 +310,13 @@ func getTransactionLogs(c *gin.Context) {
 	transactionLogsMu.Lock()
 	defer transactionLogsMu.Unlock()
 
-	// If no logs exist, return an empty array instead of null
 	if transactionLogs == nil {
 		transactionLogs = []TransactionLog{}
+	}
+
+	log.Printf("📜 Fetching transaction logs: %d entries", len(transactionLogs))
+	for _, logEntry := range transactionLogs {
+		log.Printf("📝 Log Entry: %+v", logEntry)
 	}
 
 	c.JSON(http.StatusOK, gin.H{"logs": transactionLogs})
@@ -376,6 +398,7 @@ func listRoutes(c *gin.Context) {
 			"/assignNodesToShard",
 			"/shardTransactions",
 			"/removeLastBlock",
+			"/getTransactionStatus",
 		},
 	})
 }
@@ -397,10 +420,37 @@ func getTransactionStatus(c *gin.Context) {
 }
 
 func addShardedTransactionHandler(c *gin.Context) {
+	var reqBody struct {
+		SourceBlock int    `json:"source"`
+		TargetBlock int    `json:"target"`
+		Data        string `json:"data"`
+	}
+	// Parse and validate request
+	if err := c.ShouldBindJSON(&reqBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+		return
+	}
+	// Generate a unique Transaction ID
+	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
-    c.JSON(http.StatusAccepted, gin.H{
-        "message": "Sharded transaction submitted for processing",
-    }) 
+	// Store transaction as pending
+	TransactionMu.Lock()
+	transactionStatus[transactionID] = "pending"
+	TransactionMu.Unlock()
+
+	isSharded := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock)) != getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
+
+	// Process transaction asynchronously
+	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
+
+	log.Printf("🔍 Sharded Transaction being added -> Source: %d | Target: %d | Data: %s", reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+
+	// Return response immediately
+	c.JSON(http.StatusAccepted, gin.H{
+		"message":       "Sharded transaction submitted for processing",
+		"transactionID": transactionID,
+		"status":        "pending",
+	})
 }
 
 // Assign multiple nodes to a specific shard
@@ -524,6 +574,7 @@ func addTransactionHandler(c *gin.Context) {
 		"transactionID": transactionID,
 		"status":        "pending",
 	})
+
 }
 
 // Add multiple transactions in parallel
@@ -794,7 +845,7 @@ func main() {
 			switch choice {
 			case 1:
 				fmt.Println("⚡ Running Sharded Transactions...")
-				
+
 				blockchain_test.ProcessSharded(10, 4)
 			case 2:
 				fmt.Println("📜 Running Non-Sharded Transactions...")
