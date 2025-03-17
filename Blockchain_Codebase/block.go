@@ -79,36 +79,35 @@ func calculateHash(index int, timestamp string, transactions []Transaction, prev
 	return hex.EncodeToString(hash[:])
 }
 
-func getShardID(containerStr string) int {
+// Assigns a transaction to a shard based on organization or fallback hashing
+func getShardID(containerID interface{}) int {
+	// Ensure containerID is converted to a string
+	containerStr := fmt.Sprintf("%v", containerID)
+
+	// Handle short IDs properly
 	if len(containerStr) < 1 {
 		log.Printf("⚠️ Invalid containerID: '%s' (Too short)", containerStr)
 		return 0 // Default to shard 0 if ID is invalid
 	}
 
-	// Explicit shard assignment based on organization prefix
-	switch {
-	case strings.HasPrefix(containerStr, "org1"):
+	// Assign explicit shards for specific organizations
+	if strings.HasPrefix(containerStr, "org1") {
 		log.Printf("✅ Assigned '%s' to Shard 0 (Org1)", containerStr)
-		return 0
-	case strings.HasPrefix(containerStr, "org2"):
+		return 0 // Shard 0 for Org1
+	} else if strings.HasPrefix(containerStr, "org2") {
 		log.Printf("✅ Assigned '%s' to Shard 1 (Org2)", containerStr)
 		return 1
 	}
-
-	// Handle numeric container IDs more evenly
 	if numID, err := strconv.Atoi(containerStr); err == nil {
-		shard := (numID / 2) % NumShards // Better even distribution
+		shard := numID % NumShards
 		log.Printf("🔀 Assigned '%s' to Shard %d (Numeric ID)", containerStr, shard)
 		return shard
 	}
-
-	// Fallback: Hash-based assignment for unknown orgs
 	hash := sha256.Sum256([]byte(containerStr))
 	shard := int(hash[0]) % NumShards
 	log.Printf("🔀 Assigned '%s' to Shard %d (Fallback Hash)", containerStr, shard)
 	return shard
 }
-
 
 func addBlock(containerID string) {
 	BlockchainMu.Lock()
