@@ -127,28 +127,26 @@ func init() {
 	initShards() // Ensure sharding system is initialized
 }
 
-func processTransaction(transactionID string, source int, target int, data string, expectedSharded bool) {
+// Correctly processes only the selected transaction type
+func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
 	startTime := time.Now()
 
-	// Verify actual shard assignments
 	sourceShard := getShardID(fmt.Sprintf("%d", source))
 	targetShard := getShardID(fmt.Sprintf("%d", target))
-	isSharded := sourceShard != targetShard // Correct dynamic check
+	actualSharded := sourceShard != targetShard
 
-	// Log correct classification
-	log.Printf("🔍 Processing Transaction: %s | Source: %d (Shard %d) → Target: %d (Shard %d) | Actual Sharded: %v",
-		transactionID, source, sourceShard, target, targetShard, isSharded)
-
-	// If a transaction was expected to be sharded but isn't, adjust the target
-	if expectedSharded && !isSharded {
-		log.Printf("⚠️ Mismatch! Expected sharded but assigned same shard. Adjusting target...")
-		target = (target + 1) % 10 // Adjust target to ensure different shard
-		targetShard = getShardID(fmt.Sprintf("%d", target))
-		isSharded = sourceShard != targetShard
+	if isSharded != actualSharded {
+		log.Printf("⚠️ Transaction Mismatch: Expected Sharded: %v, Actual Sharded: %v", isSharded, actualSharded)
+		if isSharded {
+			// Adjust target to ensure sharding
+			target = (target + 1) % 10
+			targetShard = getShardID(fmt.Sprintf("%d", target))
+			actualSharded = sourceShard != targetShard
+			log.Printf("🔄 Adjusted target to %d to enforce sharding", target)
+		}
 	}
 
-	// Simulate processing time
-	if isSharded {
+	if actualSharded {
 		time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second)
 	} else {
 		time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second)
@@ -157,7 +155,6 @@ func processTransaction(transactionID string, source int, target int, data strin
 	BlockchainMu.Lock()
 	defer BlockchainMu.Unlock()
 
-	// Find the source block
 	var sourceBlock *Block
 	for i := range Blockchain {
 		if Blockchain[i].Index == source {
@@ -165,6 +162,7 @@ func processTransaction(transactionID string, source int, target int, data strin
 			break
 		}
 	}
+
 	if sourceBlock == nil {
 		log.Printf("❌ ERROR: Source block %d not found for transaction %s", source, transactionID)
 		TransactionMu.Lock()
@@ -172,90 +170,36 @@ func processTransaction(transactionID string, source int, target int, data strin
 		TransactionMu.Unlock()
 		return
 	}
-	// Segmenting transaction data
-	totalSegments := (len(data) + maxSegmentSize - 1) / maxSegmentSize
+
+	executionTime := time.Since(startTime).Seconds() * 1000
+
 	TransactionMu.Lock()
-	transactionSegments[transactionID] = make([]TransactionSegment, 0, totalSegments)
+	typeLabel := map[bool]string{true: "Sharded", false: "Non-Sharded"}[actualSharded]
+	sourceBlock.Transactions = append(sourceBlock.Transactions, Transaction{
+		TransactionID: transactionID,
+		Source:        source,
+		Target:        target,
+		Data:          data,
+		Status:        "completed",
+		Type:          typeLabel,
+		ExecTime:      executionTime,
+		Timestamp:     time.Now().Format(time.RFC3339),
+	})
+	transactionStatus[transactionID] = "completed"
 	TransactionMu.Unlock()
 
-	// Process transaction segments in parallel
-	var wg sync.WaitGroup
-	for i := 0; i < totalSegments; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			start := i * maxSegmentSize
-			end := start + maxSegmentSize
-			if end > len(data) {
-				end = len(data)
-			}
-
-			segment := TransactionSegment{
-				TransactionID: transactionID,
-				ShardID:       sourceShard,
-				SegmentIndex:  i,
-				TotalSegments: totalSegments,
-				Data:          data[start:end],
-			}
-
-			TransactionMu.Lock()
-			transactionSegments[transactionID] = append(transactionSegments[transactionID], segment)
-			TransactionMu.Unlock()
-
-			log.Printf("🔄 Processed segment %d/%d for transaction %s", i+1, totalSegments, transactionID)
-		}(i)
-	}
-	wg.Wait()
-
-	executionTime := time.Since(startTime).Seconds() * 1000 // Convert to ms
-
-	// Finalizing the transaction
-	TransactionMu.Lock()
-	if len(transactionSegments[transactionID]) == totalSegments {
-		fullData := ""
-		for _, seg := range transactionSegments[transactionID] {
-			fullData += seg.Data
-		}
-		newTransaction := Transaction{
-			TransactionID: transactionID,
-			Source:        source,
-			Target:        target,
-			Data:          fullData,
-			Status:        "completed",
-			Type: func() string {
-				if isSharded {
-					return "Sharded"
-				}
-				return "Non-Sharded"
-			}(),
-			ExecTime:  executionTime,
-			Timestamp: time.Now().Format(time.RFC3339),
-		}
-
-		sourceBlock.Transactions = append(sourceBlock.Transactions, newTransaction)
-		transactionStatus[transactionID] = "completed"
-		delete(transactionSegments, transactionID)
-
-		log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
-			transactionID, source, target, newTransaction.Type, executionTime)
-	} else {
-		transactionStatus[transactionID] = "in-progress"
-	}
-	TransactionMu.Unlock()
-	// Logging the transaction
 	transactionLogsMu.Lock()
-	transactionType := map[bool]string{true: "Sharded", false: "Non-Sharded"}[isSharded]
-	log.Printf("📝 Adding to Transaction Logs: ID=%s, Type=%s", transactionID, transactionType)
-
 	transactionLogs = append(transactionLogs, TransactionLog{
 		TxID:      transactionID,
 		Source:    source,
 		Target:    target,
-		Type:      transactionType,
+		Type:      typeLabel,
 		ExecTime:  executionTime,
 		Timestamp: time.Now().Format(time.RFC3339),
 	})
 	transactionLogsMu.Unlock()
+
+	log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)", transactionID, source, target, typeLabel, executionTime)
 }
 
 // Process running Docker containers and add them to the blockchain
