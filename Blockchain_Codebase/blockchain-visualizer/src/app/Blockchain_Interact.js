@@ -23,14 +23,17 @@ export default function SpiderWebView() {
   const [parallelModalOpen, setParallelModalOpen] = useState(false)
   const [parallelTransactions, setParallelTransactions] = useState([]);
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
-  const [transactionLogs, setTransactionLogs] = useState([]);  
+
   const [logsDropdownOpen, setLogsDropdownOpen] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false); // Controls log visibility
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [transactionLogs, setTransactionLogs] = useState([]);  
+  
 
   const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
     fetchBlockchain();
+    fetchTransactionLogs();
     if (pendingTransactions.length > 0) {
       const interval = setInterval(checkPendingTransactions, 2000);
       return () => clearInterval(interval);
@@ -84,6 +87,17 @@ export default function SpiderWebView() {
       console.error("❌ Error sending transaction:", error);
     }
   };
+  const fetchTransactionLogs = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/transactionLogs`);
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      const data = await response.json();
+      setTransactionLogs(data.logs.slice(-10)); // Show last 10 transactions
+    } catch (err) {
+      console.error("Error fetching transaction logs:", err);
+    }
+  };
+  
   const checkPendingTransactions = async () => {
     if (pendingTransactions.length === 0) return;
   
@@ -427,7 +441,7 @@ export default function SpiderWebView() {
               onClick={() => setLogsDropdownOpen(!logsDropdownOpen)}
               className="w-full px-4 py-2 bg-gray-700 text-white rounded"
             >
-              {logsDropdownOpen ? "▼ Hide Recent Transactions" : "▶ Show Recent Transactions"}
+            {logsDropdownOpen ? "▼ Hide Recent Transactions" : "▶ Show Recent Transactions"}
             </button>
             {logsDropdownOpen && (
               <div className="max-h-40 overflow-y-auto bg-gray-700 p-2 rounded mt-2">
