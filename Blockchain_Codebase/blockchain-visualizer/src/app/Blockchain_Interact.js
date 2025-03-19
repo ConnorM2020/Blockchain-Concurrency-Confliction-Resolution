@@ -3,32 +3,31 @@
 import React, { useState, useEffect } from "react";
 import ReactFlow, { MiniMap, Controls, Background, ReactFlowProvider, useEdgesState, useNodesState } from "reactflow";
 import "reactflow/dist/style.css";
+ 
+import { useRouter } from "next/navigation"; 
 
 const API_BASE = "http://localhost:8080";
 
 export default function SpiderWebView() {
+  const router = useRouter();
   const [nodes, setNodes] = useNodesState([]);
   const [edges, setEdges] = useEdgesState([]);
   const [selectedNodes, setSelectedNodes] = useState([]);
   const [selectedShard, setSelectedShard] = useState(1);
   const [shardOptions, setShardOptions] = useState([1, 2, 3, 4, 5]);
   const [shardModalOpen, setShardModalOpen] = useState(false);
-  const [pendingTransactions, setPendingTransactions]= useState([]);
-  // Transaction handling
+  const [pendingTransactions, setPendingTransactions] = useState([]);
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
   const [transactionData, setTransactionData] = useState("");
   const [sourceNode, setSourceNode] = useState(null);
   const [targetNode, setTargetNode] = useState(null);
-  const [transactionStatus, setTransactionStatus] = useState({})
-  const [parallelModalOpen, setParallelModalOpen] = useState(false)
+  const [transactionStatus, setTransactionStatus] = useState({});
+  const [parallelModalOpen, setParallelModalOpen] = useState(false);
   const [parallelTransactions, setParallelTransactions] = useState([]);
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
-
   const [logsDropdownOpen, setLogsDropdownOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
-  const [transactionLogs, setTransactionLogs] = useState([]);  
-  
-
+  const [transactionLogs, setTransactionLogs] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
 
   useEffect(() => {
@@ -400,12 +399,13 @@ export default function SpiderWebView() {
       console.error("❌ Error resetting blockchain:", err);
     }
   };
+  
   return (
-      <ReactFlowProvider>
+    <ReactFlowProvider>
       <div className="w-screen h-screen flex bg-black text-white">
         {/* Sidebar Toggle Button */}
         <button
-          className="absolute top-4 left-4 bg-blue-600 text-white px-4 py-2 rounded z-10"
+          className="absolute top-4 left-10 bg-blue-600 text-white px-4 py-2 rounded z-10"
           onClick={() => setSidePanelOpen(!sidePanelOpen)}
         >
           {sidePanelOpen ? "← Close Panel" : "→ Open Transactions"}
@@ -413,60 +413,39 @@ export default function SpiderWebView() {
 
         {/* Side Panel */}
         <div
-          className={`absolute top-0 left-0 h-full bg-gray-800 p-6 shadow-lg transition-transform duration-300 ${sidePanelOpen ? "translate-x-0" : "-translate-x-full"}`}
+          className={`absolute top-0 left-0 h-full bg-gray-800 p-6 shadow-lg transition-transform duration-300 ${
+            sidePanelOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
           style={{ width: "250px" }}
         >
-          <h2 className="text-lg font-bold mb-4">Transaction Options</h2>
-          <button
-            onClick={() => setShardModalOpen(true)}
-            className="w-full px-4 py-2 mb-2 bg-purple-600 text-white rounded"
-          > Create New Shard
+          <h2 className="text-lg font-bold mb-4 mt-12">Transaction Options</h2>
+
+          <button className="w-full px-4 py-2 mb-2 bg-purple-600 text-white rounded" onClick={() => setShardModalOpen(true)}>
+            Create New Shard
           </button>
-          <button
-            onClick={() => setParallelModalOpen(true)}
-            className="w-full px-4 py-2 bg-green-600 text-white rounded"
-          > Parallel Transactions
+          <button className="w-full px-4 py-2 bg-green-600 text-white rounded" onClick={() => setParallelModalOpen(true)}>
+            Parallel Transactions
           </button>
-          <button
-            onClick={fetchBlockchain}
-            className="w-full px-4 py-2 bg-blue-600 text-white rounded"
-          > Refresh Blockchain
+          <button className="w-full px-4 py-2 bg-blue-600 text-white rounded" onClick={fetchBlockchain}>
+            Refresh Blockchain
           </button>
-          <button className="px-4 py-2 bg-red-600 text-white rounded" onClick={resetBlockchain}>
+          <button className="w-full px-4 py-2 bg-red-600 text-white rounded" onClick={resetBlockchain}>
             Reset Blockchain
           </button>
-          {/* Recent Transaction Logs Dropdown */}
-          <div className="mt-4">
-            <button
-              onClick={() => setLogsDropdownOpen(!logsDropdownOpen)}
-              className="w-full px-4 py-2 bg-gray-700 text-white rounded"
-            >
-            {logsDropdownOpen ? "▼ Hide Recent Transactions" : "▶ Show Recent Transactions"}
-            </button>
-            {logsDropdownOpen && (
-              <div className="max-h-40 overflow-y-auto bg-gray-700 p-2 rounded mt-2">
-                {transactionLogs.length > 0 ? (
-                  transactionLogs.map((log, index) => (
-                    <div key={index} className="text-sm text-white border-b border-gray-600 p-1">
-                      {log.Source} → {log.Target} ({log.Type})
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400">No recent transactions</p>
-                )}
-              </div>
-            )}
-          </div>
+          <button onClick={() => router.push("/transactions")} className="w-full px-4 py-2 bg-gray-700 text-white rounded mt-4">
+            View All Transactions
+          </button>
         </div>
-  
+
+        {/* Main Content */}
         <div className="w-full h-full relative mt-4">
-          <ReactFlow nodes={nodes} edges={edges} onNodeClick={handleNodeClick}>
-            
+          <ReactFlow nodes={nodes} edges={edges} onNodeClick={() => {}}>
             <MiniMap />
             <Controls />
             <Background />
           </ReactFlow>
         </div>
+
 
         {selectedNode && selectedNode.data && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
@@ -603,7 +582,6 @@ export default function SpiderWebView() {
           </div>
         </div>
       )}
-
       </div>
     </ReactFlowProvider>
   );
