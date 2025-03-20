@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from "react";
 import ReactFlow, { MiniMap, Controls, Background, ReactFlowProvider, useEdgesState, useNodesState } from "reactflow";
 import "reactflow/dist/style.css";
- 
+
+import ExecutionPanel from "./ExecutionPanel";
 import { useRouter } from "next/navigation"; 
 
 const API_BASE = "http://localhost:8080";
@@ -39,53 +40,73 @@ export default function SpiderWebView() {
     }
   }, [pendingTransactions]);  
   
-
   const fetchBlockchain = async () => {
     try {
       const response = await fetch(`${API_BASE}/blockchain`);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+  
       const data = await response.json();
       formatSpiderWebData(data);
+  
+      // Check transaction statuses
+      for (const transactionID of pendingTransactions) {
+        const status = await checkTransactionStatus(transactionID);
+  
+        if (status === "completed") {
+          setNodes((prevNodes) =>
+            prevNodes.map((node) =>
+              node.id === sourceNode?.id
+                ? { ...node, style: { background: "blue" } } // Source node turns blue
+                : targetNode.some((t) => t.id === node.id)
+                ? { ...node, style: { background: "lightgreen" } } // Target nodes turn light green
+                : node
+            )
+          );
+          // Reset selection
+          setSourceNode(null);
+          setTargetNode([]);
+        }
+      }
     } catch (err) {
       console.error("Error fetching blockchain data:", err);
     }
   };
+  
+  
 
   const sendTransaction = async () => {
-    if (!sourceNode || !targetNode || !transactionData.trim()) {
+    if (!sourceNode || !targetNode.length || !transactionData.trim()) {
       alert("Please enter valid transaction data.");
       return;
     }
   
-    const transactionPayload = {
+    const transactions = targetNode.map((target) => ({
       source: Number(sourceNode.id),
-      target: Number(targetNode.id),
+      target: Number(target.id),
       data: transactionData,
-    };
+    }));
   
     try {
-      const response = await fetch(`${API_BASE}/addTransaction`, {
+      const response = await fetch(`${API_BASE}/addParallelTransactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transactionPayload),
+        body: JSON.stringify(transactions),
       });
   
-      if (!response.ok) {
-        const errorMessage = await response.text();
-        throw new Error(`HTTP Error: ${response.status}, ${errorMessage}`);
-      }
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
   
       const result = await response.json();
-      const transactionID = result.transactionID;
+      setPendingTransactions((prev) => [...prev, ...result.transactionIDs]);
   
-      // Track this transaction as pending
-      setPendingTransactions((prev) => [...prev, transactionID]);
-  
+      // Reset modal & selections
       setTransactionModalOpen(false);
+      setSourceNode(null);
+      setTargetNode([]);
     } catch (error) {
       console.error("❌ Error sending transaction:", error);
     }
   };
+  
   const fetchTransactionLogs = async () => {
     try {
       const response = await fetch(`${API_BASE}/transactionLogs`);
@@ -275,15 +296,44 @@ export default function SpiderWebView() {
       setEdges(newEdges);
   };
 
-  
-  const handleNodeClick = (event, node) => {
+  const handleNodeClick = (_, node) => {
     if (!sourceNode) {
-      setSourceNode(node);
-    } else if (!targetNode && node.id !== sourceNode.id) {
-      setTargetNode(node);
-      setTransactionModalOpen(true);
+        setSourceNode(node);
+
+        // Update node colors for source selection (Blue)
+        setNodes((prevNodes) =>
+            prevNodes.map((n) =>
+                n.id === node.id ? { ...n, style: { background: "blue" } } : n
+            )
+        );
+    } else {
+        // ✅ Ensure `targetNode` is an array before using `.some()`
+        setTargetNode((prevTargets) => {
+            const updatedTargets = Array.isArray(prevTargets) ? [...prevTargets] : [];
+
+            // ✅ Prevent selecting itself as a target
+            if (node.id === sourceNode.id) {
+                console.warn("❌ Cannot select source node as target!");
+                return updatedTargets; // No updates, prevent selection
+            }
+
+            // ✅ Prevent duplicate selections
+            if (!updatedTargets.some((target) => target.id === node.id)) {
+                updatedTargets.push(node);
+            }
+
+            // Update node color to green (target node)
+            setNodes((prevNodes) =>
+                prevNodes.map((n) =>
+                    n.id === node.id ? { ...n, style: { background: "green" } } : n
+                )
+            );
+            return updatedTargets; // Ensuring targetNode remains an array
+        });
     }
   };
+
+
   const toggleNodeSelection = (nodeId) => {
     const numericNodeId = Number(nodeId); // Ensure nodeId is a number
     setSelectedNodes((prev) =>
@@ -360,11 +410,32 @@ export default function SpiderWebView() {
         console.error("❌ Error sending parallel transactions:", error);
     }
 };
-  const confirmShardCreation = async () => {
-    if (selectedNodes.length === 0) {
-      alert("Please select nodes to assign to a shard.");
-      return;
-    }
+  // Define the custom node type
+  const shardBubbleNode = ({ data }) => {
+    return (
+      <div
+        style={{
+          background: data.color || "gray",
+          padding: "10px",
+          borderRadius: "50%",
+          textAlign: "center",
+          color: "#fff",
+        }}
+      >
+        {data.label}
+      </div>
+    );
+  };
+
+  // Pass nodeTypes to ReactFlow
+  const nodeTypes = {
+    shardBubble: shardBubbleNode,
+  };
+    const confirmShardCreation = async () => {
+      if (selectedNodes.length === 0) {
+        alert("Please select nodes to assign to a shard.");
+        return;
+      }
 
     try {
       const response = await fetch(`${API_BASE}/assignNodesToShard`, {
@@ -403,12 +474,24 @@ export default function SpiderWebView() {
   return (
     <ReactFlowProvider>
       <div className="w-screen h-screen flex bg-black text-white">
-        {/* Sidebar Toggle Button */}
-        <button
-          className="absolute top-4 left-10 bg-blue-600 text-white px-4 py-2 rounded z-10"
-          onClick={() => setSidePanelOpen(!sidePanelOpen)}
+      {/* Pass sourceNode and targetNode as props
+
+      <ExecutionPanel
+        sourceNode={sourceNode}
+        targetNode={targetNode}
+        transactionData={transactionData}
+        setTransactionData={setTransactionData}
+        sendTransaction={sendTransaction}
+        sendParallelTransactions={sendParallelTransactions}
+        transactionLogs={transactionLogs}
+      /> */}
+        
+      {/* Sidebar Toggle Button */}
+      <button
+        className="absolute top-4 left-10 bg-blue-600 text-white px-4 py-2 rounded z-10"
+        onClick={() => setSidePanelOpen(!sidePanelOpen)}
         >
-          {sidePanelOpen ? "← Close Panel" : "→ Open Transactions"}
+        {sidePanelOpen ? "← Close Panel" : "→ Open Transactions"}
         </button>
 
         {/* Side Panel */}
@@ -436,16 +519,18 @@ export default function SpiderWebView() {
             View All Transactions
           </button>
         </div>
-
+        
         {/* Main Content */}
         <div className="w-full h-full relative mt-4">
-          <ReactFlow nodes={nodes} edges={edges} onNodeClick={() => {}}>
+          <ReactFlow nodes={nodes} 
+                    edges={edges} 
+                    nodeTypes={nodeTypes} 
+                    onNodeClick={handleNodeClick} >
             <MiniMap />
             <Controls />
             <Background />
           </ReactFlow>
         </div>
-
 
         {selectedNode && selectedNode.data && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
