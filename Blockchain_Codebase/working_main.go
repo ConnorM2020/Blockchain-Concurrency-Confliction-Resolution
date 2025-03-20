@@ -605,32 +605,37 @@ func addParallelTransactionsHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
 		return
 	}
-
-	var transactionIDs []string
-
+	var wg sync.WaitGroup
+	transactionIDs := make([]string, 0)
+	mu := sync.Mutex{}
 	for _, tx := range transactions {
-		transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
-		tx.TransactionID = transactionID
+		wg.Add(1)
+		go func(tx Transaction) {
+			defer wg.Done()
 
-		TransactionMu.Lock()
-		transactionStatus[transactionID] = "pending"
-		TransactionPool[transactionID] = &tx
-		TransactionMu.Unlock()
+			transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+			TransactionMu.Lock()
+			transactionStatus[transactionID] = "pending"
+			TransactionMu.Unlock()
 
-		transactionIDs = append(transactionIDs, transactionID)
+			isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
 
-		// Force all parallel transactions to be treated as sharded
-		isSharded := true
+			mu.Lock()
+			transactionIDs = append(transactionIDs, transactionID)
+			mu.Unlock()
 
-		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
+			// Process in a separate Goroutine
+			go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
+
+		}(tx)
 	}
+	wg.Wait()
 
 	c.JSON(http.StatusAccepted, gin.H{
-		"message":        "Parallel transactions are being processed as sharded transactions",
+		"message":        "Parallel transactions are being processed",
 		"transactionIDs": transactionIDs,
 	})
 }
-
 
 func shardTransactionsHandler(c *gin.Context) {
 	var req struct {
@@ -697,7 +702,6 @@ func shardTransactionsHandler(c *gin.Context) {
 		"transactionIDs": transactionIDs,
 	})
 }
-
 
 func createShardHandler(c *gin.Context) {
 	var reqBody struct {
