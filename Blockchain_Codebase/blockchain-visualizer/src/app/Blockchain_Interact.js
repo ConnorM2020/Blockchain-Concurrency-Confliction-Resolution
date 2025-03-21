@@ -3,9 +3,12 @@
 import React, { useState, useEffect } from "react";
 import ReactFlow, { MiniMap, Controls, Background, ReactFlowProvider, useEdgesState, useNodesState } from "reactflow";
 import "reactflow/dist/style.css";
-
+import dynamic from "next/dynamic";
 import ExecutionPanel from "./ExecutionPanel";
 import { useRouter } from "next/navigation"; 
+
+const ReactFlowComponent = dynamic(() => import("reactflow"), { ssr: false });
+
 
 const API_BASE = "http://localhost:8080";
 
@@ -21,7 +24,8 @@ export default function SpiderWebView() {
   const [transactionModalOpen, setTransactionModalOpen] = useState(false);
   const [transactionData, setTransactionData] = useState("");
   const [sourceNode, setSourceNode] = useState(null);
-  const [targetNode, setTargetNode] = useState(null);
+  const [targetNode, setTargetNode] = useState([]);
+
   const [transactionStatus, setTransactionStatus] = useState({});
   const [parallelModalOpen, setParallelModalOpen] = useState(false);
   const [parallelTransactions, setParallelTransactions] = useState([]);
@@ -129,13 +133,13 @@ export default function SpiderWebView() {
   
         const data = await response.json();
         if (data.status === "completed") {
-          setTransactionStatus((prev) => ({ ...prev, [transactionID]: "✅ Completed" }));
+          setTransactionStatus((prev) => ({ ...prev, [transactionID]: "Completed" }));
           fetchBlockchain(); // Refresh UI when transaction is done
         } else {
           updatedPending.push(transactionID); // Keep tracking if not completed
         }
       } catch (err) {
-        console.error(`❌ Error checking status for ${transactionID}:`, err);
+        console.error(`Error checking status for ${transactionID}:`, err);
       }
     }
     setPendingTransactions(updatedPending);
@@ -188,7 +192,7 @@ export default function SpiderWebView() {
       setParallelTransactions([]);
       setParallelModalOpen(false);
     } catch (error) {
-      console.error("❌ Error sending sharded transactions:", error);
+      console.error("Error sending sharded transactions:", error);
     }
   };
   
@@ -202,7 +206,7 @@ export default function SpiderWebView() {
       });
       console.log("✅ Peers successfully updated with transaction history.");
     } catch (error) {
-      console.error("❌ Error updating peers:", error);
+      console.error("Error updating peers:", error);
     }
   };
     const formatSpiderWebData = (blocks) => {
@@ -297,6 +301,11 @@ export default function SpiderWebView() {
   };
 
   const handleNodeClick = (_, node) => {
+    // Prevent Shard clicking 
+    if (node.type == "shardBubble") {
+      console.warn("Cannot select the shard ID")
+      return;
+    }
     if (!sourceNode) {
         setSourceNode(node);
 
@@ -311,13 +320,13 @@ export default function SpiderWebView() {
         setTargetNode((prevTargets) => {
             const updatedTargets = Array.isArray(prevTargets) ? [...prevTargets] : [];
 
-            // ✅ Prevent selecting itself as a target
+            // Prevent selecting itself as a target
             if (node.id === sourceNode.id) {
-                console.warn("❌ Cannot select source node as target!");
+                console.warn("Cannot select source node as target!");
                 return updatedTargets; // No updates, prevent selection
             }
 
-            // ✅ Prevent duplicate selections
+            // Prevent duplicate selections
             if (!updatedTargets.some((target) => target.id === node.id)) {
                 updatedTargets.push(node);
             }
@@ -346,10 +355,29 @@ export default function SpiderWebView() {
   const updateParallelTransaction = (index, field, value) => {
     setParallelTransactions((prev) => {
         const updatedTransactions = [...prev];
-        updatedTransactions[index] = { ...updatedTransactions[index], [field]: value };
+
+        // Validation range checking
+        if (field === "target" || field === "source") {
+            let nodeValue = Number(value);
+            const maxNodes = nodes.length; // Get total nodes count
+
+            // Ensure value is at least 1 and cycles if exceeding maxNodes
+            if (nodeValue < 1) {
+                nodeValue = 1;
+            } else if (nodeValue > maxNodes-1) {
+                nodeValue = 1; // Restart from 1 when exceeding available nodes
+            }
+
+            updatedTransactions[index] = { ...updatedTransactions[index], [field]: nodeValue };
+        } else {
+            updatedTransactions[index] = { ...updatedTransactions[index], [field]: value };
+        }
+
         return updatedTransactions;
     });
 };
+
+
   const addNewParallelTransaction = () => {
     setParallelTransactions([...parallelTransactions, { source: "", target: "", data: "" }]);
   };
@@ -407,7 +435,7 @@ export default function SpiderWebView() {
         alert("Transactions successfully sent in parallel!");
 
     } catch (error) {
-        console.error("❌ Error sending parallel transactions:", error);
+        console.error("Error sending parallel transactions:", error);
     }
 };
   // Define the custom node type
@@ -451,9 +479,34 @@ export default function SpiderWebView() {
       setSelectedNodes([]); 
       setShardModalOpen(false);
     } catch (err) {
-      console.error("❌ Error assigning nodes to shard:", err);
+      console.error("Error assigning nodes to shard:", err);
     }
   };
+  const handleCrossShardTransaction = async () => {
+    console.log("Executing Cross-Shard Transaction");
+  
+    if (!sourceNode || !targetNode.length) {
+      alert("Please select a source and target node.");
+      return;
+    }
+    try {
+      const response = await fetch("http://localhost:8080/crossShardTransaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source: sourceNode, target: targetNode }),
+      });
+  
+      if (!response.ok) throw new Error(`Error: ${response.status}`);
+  
+      const data = await response.json();
+      console.log("Cross-Shard Transaction Response:", data);
+      alert(data.message || "Cross-Shard Transaction Completed");
+    } catch (error) {
+      console.error("Error executing cross-shard transaction:", error);
+      alert("Failed to execute cross-shard transaction. Please try again.");
+    }
+  };
+  
 
   const resetBlockchain = async () => {
     try {
@@ -467,22 +520,22 @@ export default function SpiderWebView() {
       console.log("✅ Blockchain reset successfully.");
       fetchBlockchain(); // Refresh UI after reset
     } catch (err) {
-      console.error("❌ Error resetting blockchain:", err);
+      console.error("Error resetting blockchain:", err);
     }
   };
   
   return (
     <ReactFlowProvider>
       <div className="w-screen h-screen flex bg-black text-white">
-      {/* Pass sourceNode and targetNode as props
 
-      <ExecutionPanel
+      {/* <ExecutionPanel
         sourceNode={sourceNode}
         targetNode={targetNode}
         transactionData={transactionData}
         setTransactionData={setTransactionData}
         sendTransaction={sendTransaction}
         sendParallelTransactions={sendParallelTransactions}
+        sendCrossShardTransaction={handleCrossShardTransaction}
         transactionLogs={transactionLogs}
       /> */}
         
@@ -509,6 +562,9 @@ export default function SpiderWebView() {
           <button className="w-full px-4 py-2 bg-green-600 text-white rounded" onClick={() => setParallelModalOpen(true)}>
             Parallel Transactions
           </button>
+
+        
+
           <button className="w-full px-4 py-2 bg-blue-600 text-white rounded" onClick={fetchBlockchain}>
             Refresh Blockchain
           </button>
@@ -519,17 +575,14 @@ export default function SpiderWebView() {
             View All Transactions
           </button>
         </div>
-        
+
         {/* Main Content */}
         <div className="w-full h-full relative mt-4">
-          <ReactFlow nodes={nodes} 
-                    edges={edges} 
-                    nodeTypes={nodeTypes} 
-                    onNodeClick={handleNodeClick} >
+        <ReactFlowComponent nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={handleNodeClick} >
             <MiniMap />
             <Controls />
             <Background />
-          </ReactFlow>
+          </ReactFlowComponent>
         </div>
 
         {selectedNode && selectedNode.data && (
