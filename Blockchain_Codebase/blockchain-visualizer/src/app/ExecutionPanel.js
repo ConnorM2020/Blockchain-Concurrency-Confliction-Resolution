@@ -1,47 +1,77 @@
 'use client';
 
+
 import React, { useState, useEffect } from "react";
 
-const ExecutionPanel = () => {
+const ExecutionPanel = ({
+  sourceNode,
+  targetNode = [],
+  transactionData,
+  setTransactionData,
+  sendTransaction,
+  sendParallelTransactions,
+  sendCrossShardTransaction,
+}) => {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [transactionLogs, setTransactionLogs] = useState([]);
-  const [logsOpen, setLogsOpen] = useState(false); // Toggle state for logs panel
-  const [transactionType, setTransactionType] = useState("all"); // Default to showing all transactions
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [transactionType, setTransactionType] = useState("all");
+  const [transactionLogs, setTransactionLogs] = useState([]); 
 
-  // Fetch execution options from the backend on mount
-  useEffect(() => {
-    fetch("http://localhost:8080/executionOptions")
-      .then((response) => response.json())
-      .then((data) => setOptions(data.options))
-      .catch((error) => console.error("Error fetching options:", error));
-
-    fetchTransactionLogs("all"); // Fetch all transactions initially
-  }, []);
+  // Detect if this is a cross-shard transaction
+  const isCrossShard =
+    sourceNode &&
+    targetNode.length > 0 &&
+    targetNode.some((target) => target?.data?.shard_id !== sourceNode?.data?.shard_id);
 
   // Function to execute a transaction and fetch logs
   const handleExecute = (type) => {
     setLoading(true);
-    setTransactionType(type); // Update type immediately for UI
-    console.log(`Executing ${type} transaction`); // Debugging output
+    setTransactionType(type);
+    console.log(`Executing ${type} transaction`);
 
     fetch("http://localhost:8080/executeTransaction", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ option: type === "sharded" ? 1 : 2 }),
     })
-    .then((response) => response.json())
-    .then((data) => {
-      console.log("Server response:", data); // Debugging output
-      alert(data.message);
-      setTimeout(() => fetchTransactionLogs(type), 2000); // Pass type explicitly
-      setLoading(false);
-    })
-    .catch((error) => {
-      console.error("Error executing transaction:", error);
-      setLoading(false);
-    });
+      .then((response) => response.json())
+      .then((data) => {
+        console.log("Server response:", data);
+        alert(data.message);
+        setTimeout(() => fetchTransactionLogs(type), 2000);
+        setLoading(false);
+      })
+      .catch((error) => {
+        console.error("Error executing transaction:", error);
+        setLoading(false);
+      });
   };
+
+  const handleCrossShardTransaction = async () => {
+    console.log("Executing Cross-Shard Transaction");
+
+    if (!sourceNode || !targetNode.length) {
+        alert("Please select a source and target node.");
+        return;
+    }
+    try {
+        const response = await fetch("http://localhost:8080/crossShardTransaction", {  // Check this URL
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ source: sourceNode, target: targetNode }),
+        });
+
+        if (!response.ok) throw new Error(`Error: ${response.status}`);
+
+        const data = await response.json();
+        console.log("Cross-Shard Transaction Response:", data);
+        alert(data.message || "Cross-Shard Transaction Completed");
+    } catch (error) {
+        console.error("Error executing cross-shard transaction:", error);
+        alert("Failed to execute cross-shard transaction. Please try again.");
+    }
+};
 
   // Fetch logs and filter based on selected transaction type
   const fetchTransactionLogs = async (type) => {
@@ -61,7 +91,7 @@ const ExecutionPanel = () => {
         ? data.logs
         : data.logs.filter((log) => log.type.toLowerCase() === type);
 
-      setTransactionLogs(filteredLogs);
+       setTransactionLogs(type === "all" ? data.logs : data.logs.filter((log) => log.type.toLowerCase() === type));
     } catch (error) {
       console.error("Error fetching logs:", error);
     }
@@ -88,7 +118,52 @@ const ExecutionPanel = () => {
         >
           {loading ? "Processing..." : "Run Non-Sharded Transactions"}
         </button>
+        <button
+              onClick={handleCrossShardTransaction} 
+              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold"
+          > Send Cross-Shard Transaction
+          </button>
       </div>
+
+      {/* Transaction Control Panel (Appears when Source & Targets Selected) */}
+      {sourceNode && targetNode.length > 0 && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+          <h2 className="text-xl font-bold mb-4 text-white">Transaction Options</h2>
+
+          <p className="text-white mb-2">
+            <strong>Source Node:</strong> {sourceNode?.data?.label}
+          </p>
+          <p className="text-white">
+            <strong>Target Nodes:</strong> {targetNode.map((t) => t.data.label).join(", ")}
+          </p>
+
+          <textarea
+            className="w-full h-20 p-2 bg-gray-700 text-white rounded mt-4"
+            value={transactionData}
+            onChange={(e) => setTransactionData(e.target.value)}
+            placeholder="Enter transaction details..."
+          />
+
+          <div className="flex flex-wrap justify-between mt-4">
+            <button onClick={sendTransaction} className="px-4 py-2 bg-purple-600 text-white rounded">
+              Send Non-Parallel
+            </button>
+
+            <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-600 text-white rounded">
+              Send Parallel
+            </button>
+            {/* Cross-Shard Transaction Button */}
+            {isCrossShard && (
+              <button onClick={sendCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-black rounded">
+                Send Cross-Shard
+              </button>
+            )}
+          </div>
+          <button onClick={() => setTransactionData("")} className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4">
+            Reset Selection
+          </button>
+        </div>
+      )}
 
       {/* Transaction Logs Dropdown */}
       <div className="mt-6">
