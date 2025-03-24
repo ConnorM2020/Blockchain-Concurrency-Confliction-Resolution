@@ -622,14 +622,12 @@ func addParallelTransactionsHandler(c *gin.Context) {
 			mu.Lock()
 			transactionIDs = append(transactionIDs, transactionID)
 			mu.Unlock()
-
 			// Process in a separate Goroutine
 			go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
 
 		}(tx)
 	}
 	wg.Wait()
-
 	c.JSON(http.StatusAccepted, gin.H{
 		"message":        "Parallel transactions are being processed",
 		"transactionIDs": transactionIDs,

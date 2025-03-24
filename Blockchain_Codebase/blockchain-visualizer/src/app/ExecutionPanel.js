@@ -1,22 +1,26 @@
 'use client';
 
-
 import React, { useState, useEffect } from "react";
 
 const ExecutionPanel = ({
   sourceNode,
   targetNode = [],
+  setSourceNode,
+  setTargetNode,
+  setNodes, 
   transactionData,
   setTransactionData,
   sendTransaction,
   sendParallelTransactions,
-  sendCrossShardTransaction,
 }) => {
+
+
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [transactionType, setTransactionType] = useState("all");
   const [transactionLogs, setTransactionLogs] = useState([]); 
+  const [crossShardModalOpen, setCrossShardModalOpen] = useState(false);
 
   // Detect if this is a cross-shard transaction
   const isCrossShard =
@@ -24,7 +28,6 @@ const ExecutionPanel = ({
     targetNode.length > 0 &&
     targetNode.some((target) => target?.data?.shard_id !== sourceNode?.data?.shard_id);
 
-  // Function to execute a transaction and fetch logs
   const handleExecute = (type) => {
     setLoading(true);
     setTransactionType(type);
@@ -48,34 +51,64 @@ const ExecutionPanel = ({
       });
   };
 
+  const handleTransactionSend = (type) => {
+    if (type === "sharded") {
+      sendParallelTransactions();
+    } else {
+      sendTransaction();
+    }
+  };
+  
+
   const handleCrossShardTransaction = async () => {
+    console.log("sourceNode:", sourceNode);
+    console.log("targetNode:", targetNode);
     console.log("Executing Cross-Shard Transaction");
-
+  
     if (!sourceNode || !targetNode.length) {
-        alert("Please select a source and target node.");
-        return;
+      alert("Please select a source and target node.");
+      return;
     }
+    setCrossShardModalOpen(true);
+  };
+
+  const submitCrossShardTransaction = async () => {
+    if (!transactionData.trim()) {
+      alert("Please enter transaction data.");
+      return;
+    }
+  
     try {
-        const response = await fetch("http://localhost:8080/crossShardTransaction", {  // Check this URL
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ source: sourceNode, target: targetNode }),
-        });
+      const response = await fetch("http://localhost:8080/crossShardTransaction", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: sourceNode,
+          target: targetNode,
+          data: transactionData,
+        }),
+      });
+  
+      if (!response.ok) throw new Error(`Error: ${response.status}`);
+  
+      const data = await response.json();
+      console.log("Cross-Shard Transaction Response:", data);
+      alert(data.message || "Cross-Shard Transaction Completed");
+  
+      setCrossShardModalOpen(false);
+      setTransactionData("");
+      setSourceNode(null);
+      setTargetNode([]);
+      fetchTransactionLogs("sharded");      
 
-        if (!response.ok) throw new Error(`Error: ${response.status}`);
-
-        const data = await response.json();
-        console.log("Cross-Shard Transaction Response:", data);
-        alert(data.message || "Cross-Shard Transaction Completed");
     } catch (error) {
-        console.error("Error executing cross-shard transaction:", error);
-        alert("Failed to execute cross-shard transaction. Please try again.");
+      console.error("Error executing cross-shard transaction:", error);
+      alert("Failed to execute cross-shard transaction.");
     }
-};
+  };
 
-  // Fetch logs and filter based on selected transaction type
   const fetchTransactionLogs = async (type) => {
-    console.log(`Fetching logs for: ${type}`); // Debugging output
+    console.log(`Fetching logs for: ${type}`);
     try {
       const response = await fetch("http://localhost:8080/transactionLogs");
       const data = await response.json();
@@ -86,12 +119,11 @@ const ExecutionPanel = ({
         return;
       }
 
-      // Filter logs based on transaction type
       const filteredLogs = type === "all"
         ? data.logs
         : data.logs.filter((log) => log.type.toLowerCase() === type);
 
-       setTransactionLogs(type === "all" ? data.logs : data.logs.filter((log) => log.type.toLowerCase() === type));
+       setTransactionLogs(filteredLogs);
     } catch (error) {
       console.error("Error fetching logs:", error);
     }
@@ -101,7 +133,6 @@ const ExecutionPanel = ({
     <div className="execution-panel text-center mb-6">
       <h2 className="text-xl font-bold text-white mb-4">🚀 Blockchain Execution Options</h2>
 
-      {/* Execution Buttons */}
       <div className="flex flex-wrap justify-center gap-4">
         <button
           onClick={() => handleExecute("sharded")}
@@ -118,18 +149,18 @@ const ExecutionPanel = ({
         >
           {loading ? "Processing..." : "Run Non-Sharded Transactions"}
         </button>
+
         <button
-              onClick={handleCrossShardTransaction} 
-              className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold"
-          > Send Cross-Shard Transaction
-          </button>
+          onClick={handleCrossShardTransaction} 
+          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold"
+        >
+          Send Cross-Shard Transaction
+        </button>
       </div>
 
-      {/* Transaction Control Panel (Appears when Source & Targets Selected) */}
       {sourceNode && targetNode.length > 0 && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
           <h2 className="text-xl font-bold mb-4 text-white">Transaction Options</h2>
-
           <p className="text-white mb-2">
             <strong>Source Node:</strong> {sourceNode?.data?.label}
           </p>
@@ -143,29 +174,78 @@ const ExecutionPanel = ({
             onChange={(e) => setTransactionData(e.target.value)}
             placeholder="Enter transaction details..."
           />
-
           <div className="flex flex-wrap justify-between mt-4">
-            <button onClick={sendTransaction} className="px-4 py-2 bg-purple-600 text-white rounded">
-              Send Non-Parallel
-            </button>
-
-            <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-600 text-white rounded">
-              Send Parallel
-            </button>
-            {/* Cross-Shard Transaction Button */}
-            {isCrossShard && (
-              <button onClick={sendCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-black rounded">
+          <button
+            onClick={() => handleTransactionSend("non-sharded")}
+            className="px-4 py-2 bg-purple-600 text-white rounded"
+          > Send Non-Parallel Transaction
+          </button>
+          
+          <button
+            onClick={() => handleTransactionSend("sharded")}
+            className="px-4 py-2 bg-green-600 text-white rounded"
+          > Send Parallel Transaction
+          </button>
+            {/* {isCrossShard && (
+              <button onClick={handleCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-black rounded">
                 Send Cross-Shard
               </button>
-            )}
+            )} */}
           </div>
           <button onClick={() => setTransactionData("")} className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4">
             Reset Selection
           </button>
+
+          <button
+          onClick={() => {
+            setSourceNode(null);
+            setTargetNode([]);
+            setTransactionData("");
+
+            // Reset only non-shardBubble nodes
+            setNodes((prevNodes) =>
+              prevNodes.map((node) => {
+                if (node.type === "shardBubble") return node;
+
+                return {
+                  ...node,
+                  style: {
+                    ...node.style,
+                    background: node.data?.color || "#444", // Restore background
+                    color: "#fff", // Ensure text stays white
+                  },
+                };
+              })
+            );
+          }}
+          className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
+        > Back
+        </button>
         </div>
       )}
 
-      {/* Transaction Logs Dropdown */}
+      {crossShardModalOpen && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+          <h2 className="text-xl font-bold mb-4 text-white">
+            Send <span className="text-yellow-400">Cross-Shard Transaction</span>
+          </h2>
+          <textarea
+            className="w-full h-20 p-2 bg-gray-700 text-white rounded"
+            placeholder="Enter transaction data"
+            value={transactionData}
+            onChange={(e) => setTransactionData(e.target.value)}
+          />
+          <div className="flex justify-between mt-4">
+            <button onClick={() => setCrossShardModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
+              Cancel
+            </button>
+            <button onClick={submitCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-white rounded">
+              Submit
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="mt-6">
         <button
           onClick={() => setLogsOpen(!logsOpen)}
@@ -174,7 +254,6 @@ const ExecutionPanel = ({
           {logsOpen ? "▼ Hide Recent Transaction Logs" : "▲ Show Recent Transaction Logs"}
         </button>
 
-        {/* Log Content */}
         <div className={`overflow-hidden transition-all duration-500 ${logsOpen ? "max-h-96" : "max-h-0"}`}>
           <div className="bg-gray-900 p-4 rounded-lg shadow-lg text-white overflow-y-auto max-h-96">
             <h3 className="text-lg font-bold mb-2">📜 Transaction Log</h3>
