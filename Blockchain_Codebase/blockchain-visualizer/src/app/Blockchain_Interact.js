@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import ReactFlow, { MiniMap, Controls, Background, ReactFlowProvider, useEdgesState, useNodesState } from "reactflow";
 import "reactflow/dist/style.css";
 import dynamic from "next/dynamic";
@@ -306,48 +306,85 @@ export default function SpiderWebView() {
       setNodes([...shardBubbles, ...newNodes]);
       setEdges(newEdges);
   };
-
-  const handleNodeClick = (_, node) => {
+  const handleNodeClick = (event, node) => {
     // Prevent Shard clicking 
-    if (node.type == "shardBubble") {
-      console.warn("Cannot select the shard ID")
+    if (node.type === "shardBubble") {
+      console.warn("Cannot select the shard ID");
       return;
     }
+  
+    // First click = set source node
     if (!sourceNode) {
-        setSourceNode(node);
-
-        // Update node colors for source selection (Blue)
-        setNodes((prevNodes) =>
-            prevNodes.map((n) =>
-                n.id === node.id ? { ...n, style: { background: "blue" } } : n
-            )
-        );
+      setSourceNode(node);
+  
+      // Highlight source node
+      setNodes((prevNodes) =>
+        prevNodes.map((n) =>
+          n.id === node.id ? { ...n, style: { ...n.style, background: "blue" } } : n
+        )
+      );
     } else {
-        // ✅ Ensure `targetNode` is an array before using `.some()`
+      // Holding Ctrl: toggle multi-target selection
+      const isCtrlPressed = event.ctrlKey || event.metaKey;
+  
+      if (isCtrlPressed) {
         setTargetNode((prevTargets) => {
-            const updatedTargets = Array.isArray(prevTargets) ? [...prevTargets] : [];
-
-            // Prevent selecting itself as a target
-            if (node.id === sourceNode.id) {
-                console.warn("Cannot select source node as target!");
-                return updatedTargets; // No updates, prevent selection
-            }
-
-            // Prevent duplicate selections
-            if (!updatedTargets.some((target) => target.id === node.id)) {
-                updatedTargets.push(node);
-            }
-
-            // Update node color to green (target node)
-            setNodes((prevNodes) =>
-                prevNodes.map((n) =>
-                    n.id === node.id ? { ...n, style: { background: "green" } } : n
-                )
-            );
-            return updatedTargets; // Ensuring targetNode remains an array
+          const exists = prevTargets.find((t) => t.id === node.id);
+  
+          if (node.id === sourceNode.id) {
+            console.warn("Cannot select source node as target!");
+            return prevTargets;
+          }
+  
+          let updatedTargets;
+          if (exists) {
+            // Remove if already selected
+            updatedTargets = prevTargets.filter((t) => t.id !== node.id);
+          } else {
+            // Add if new
+            updatedTargets = [...prevTargets, node];
+          }
+  
+          // Update visual feedback
+          setNodes((prevNodes) =>
+            prevNodes.map((n) => {
+              if (n.id === node.id) {
+                return {
+                  ...n,
+                  style: {
+                    ...n.style,
+                    background: exists ? node.data?.color || "#444" : "green", // Toggle green if newly added
+                  },
+                };
+              }
+              return n;
+            })
+          );
+  
+          return updatedTargets;
         });
+      } else {
+        // Not holding Ctrl: reset source and re-select
+        setSourceNode(node);
+        setTargetNode([]);
+  
+        // Reset styles, highlight only the new source node
+        setNodes((prevNodes) =>
+          prevNodes.map((n) => {
+            if (n.type === "shardBubble") return n;
+            if (n.id === node.id) {
+              return { ...n, style: { ...n.style, background: "blue", color: "#fff" } };
+            }
+            return {
+              ...n,
+              style: { ...n.style, background: n.data?.color || "#444", color: "#fff" },
+            };
+          })
+        );
+      }
     }
   };
+  
 
 
   const toggleNodeSelection = (nodeId) => {
@@ -462,10 +499,11 @@ export default function SpiderWebView() {
     );
   };
 
-  // Pass nodeTypes to ReactFlow
-  const nodeTypes = {
+  // Inside your component:
+  const nodeTypes = useMemo(() => ({
     shardBubble: shardBubbleNode,
-  };
+  }), []);
+
     const confirmShardCreation = async () => {
       if (selectedNodes.length === 0) {
         alert("Please select nodes to assign to a shard.");
