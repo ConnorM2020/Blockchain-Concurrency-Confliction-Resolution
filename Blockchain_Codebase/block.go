@@ -45,6 +45,7 @@ type ShardedTransaction struct {
 	Source []int  `json:"source"`
 	Target []int  `json:"target"`
 	Data   string `json:"data"`
+	Type   string `json:"type"`
 }
 
 // Handling concurrency

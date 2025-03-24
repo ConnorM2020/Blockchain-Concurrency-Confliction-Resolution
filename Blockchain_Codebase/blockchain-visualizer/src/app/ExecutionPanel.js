@@ -171,7 +171,7 @@ const ExecutionPanel = ({
           onClick={() => setLogsOpen(!logsOpen)}
           className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg"
         >
-          {logsOpen ? "▼ Hide Transaction Logs" : "▲ Show Transaction Logs"}
+          {logsOpen ? "▼ Hide Recent Transaction Logs" : "▲ Show Recent Transaction Logs"}
         </button>
 
         {/* Log Content */}

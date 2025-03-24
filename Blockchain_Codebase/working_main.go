@@ -38,9 +38,10 @@ const (
 )
 
 var (
-	transactionLogs     []TransactionLog
-	transactionLogsMu   sync.Mutex
-	port                string
+	transactionLogs   []TransactionLog
+	transactionLogsMu sync.Mutex
+	port              string
+
 	process             bool
 	server              bool
 	TransactionPool     = make(map[string]*Transaction)
@@ -112,7 +113,7 @@ func executeTransaction(c *gin.Context) {
 		return
 	}
 
-	// ✅ Pass `isSharded` explicitly to `processTransaction`
+	// Pass `isSharded` explicitly to `processTransaction`
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 	go processTransaction(transactionID, sourceBlock, targetBlock, "Transaction Data", isSharded)
 
@@ -149,40 +150,34 @@ func init() {
 	flag.StringVar(&port, "port", "8080", "Port number to run the server")
 	flag.BoolVar(&process, "process", false, "Process containers and add to blockchain")
 	flag.BoolVar(&server, "server", false, "Run REST API server for inspecting containers")
+
 	flag.Parse()
 	initShards() // Ensure sharding system is initialized
 }
 
-// Correctly processes only the selected transaction type
 func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
 	startTime := time.Now()
 
-	sourceShard := getShardID(fmt.Sprintf("%d", source))
-	targetShard := getShardID(fmt.Sprintf("%d", target))
-	actualSharded := sourceShard != targetShard
-
-	// Ensure sharding consistency
-	if isSharded != actualSharded {
-		log.Printf("⚠️ Transaction Mismatch: Expected Sharded: %v, Actual Sharded: %v", isSharded, actualSharded)
-
-		// Adjust target to enforce sharding/non-sharding
-		if isSharded {
-			for getShardID(fmt.Sprintf("%d", target)) == sourceShard {
-				target = rand.Intn(10) + 1
-			}
-		} else {
-			for getShardID(fmt.Sprintf("%d", target)) != sourceShard {
-				target = rand.Intn(10) + 1
-			}
+	//  Enforce correct sharding logic
+	if isSharded {
+		// Force different shards
+		for getShardID(fmt.Sprintf("%d", target)) == getShardID(fmt.Sprintf("%d", source)) {
+			target = rand.Intn(10) + 1
 		}
-		targetShard = getShardID(fmt.Sprintf("%d", target))
-		actualSharded = sourceShard != targetShard
-		log.Printf("🔄 Adjusted target to %d to match sharding rules", target)
+	} else {
+		// Force same shard
+		for getShardID(fmt.Sprintf("%d", target)) != getShardID(fmt.Sprintf("%d", source)) {
+			target = rand.Intn(10) + 1
+		}
 	}
 
-	// Simulate execution time (NON-BLOCKING)
+	// Use the intended sharding type for labelling
+	typeLabel := map[bool]string{true: "Sharded", false: "Non-Sharded"}[isSharded]
+
+	// Simulate execution in a goroutine
 	go func() {
-		if actualSharded {
+		// Simulate processing time
+		if isSharded {
 			time.Sleep(time.Duration(1+rand.Intn(2)) * time.Second)
 		} else {
 			time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second)
@@ -207,10 +202,10 @@ func processTransaction(transactionID string, source int, target int, data strin
 			return
 		}
 
-		executionTime := time.Since(startTime).Seconds() * 1000
+		executionTime := time.Since(startTime).Seconds() * 1000 // Convert to ms
 
+		// Update block with transaction
 		TransactionMu.Lock()
-		typeLabel := map[bool]string{true: "Sharded", false: "Non-Sharded"}[actualSharded]
 		sourceBlock.Transactions = append(sourceBlock.Transactions, Transaction{
 			TransactionID: transactionID,
 			Source:        source,
@@ -224,6 +219,7 @@ func processTransaction(transactionID string, source int, target int, data strin
 		transactionStatus[transactionID] = "completed"
 		TransactionMu.Unlock()
 
+		// Log to global transaction history
 		transactionLogsMu.Lock()
 		transactionLogs = append(transactionLogs, TransactionLog{
 			TxID:      transactionID,
@@ -235,7 +231,8 @@ func processTransaction(transactionID string, source int, target int, data strin
 		})
 		transactionLogsMu.Unlock()
 
-		log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)", transactionID, source, target, typeLabel, executionTime)
+		log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
+			transactionID, source, target, typeLabel, executionTime)
 	}()
 }
 
@@ -408,6 +405,7 @@ func addShardedTransactionHandler(c *gin.Context) {
 		SourceBlock int    `json:"source"`
 		TargetBlock int    `json:"target"`
 		Data        string `json:"data"`
+		Type        string `json:"type"`
 	}
 	// Parse and validate request
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
@@ -422,7 +420,7 @@ func addShardedTransactionHandler(c *gin.Context) {
 	transactionStatus[transactionID] = "pending"
 	TransactionMu.Unlock()
 
-	isSharded := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock)) != getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
+	isSharded := reqBody.Type == "sharded"
 
 	// Process transaction asynchronously
 	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
@@ -561,38 +559,39 @@ func addTransactionHandler(c *gin.Context) {
 
 }
 
-// Add multiple transactions in parallel
-func addParallelTransactions(c *gin.Context) {
-	var transactions []Transaction
-	if err := c.ShouldBindJSON(&transactions); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
-		return
-	}
+// // Add multiple transactions in parallel
+// func addParallelTransactions(c *gin.Context) {
+// 	var transactions []Transaction
+// 	if err := c.ShouldBindJSON(&transactions); err != nil {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
+// 		return
+// 	}
 
-	if len(transactions) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
-		return
-	}
-	var transactionIDs []string
-	for _, tx := range transactions {
-		transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
-		tx.TransactionID = transactionID
+// 	if len(transactions) == 0 {
+// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
+// 		return
+// 	}
+// 	var transactionIDs []string
+// 	for _, tx := range transactions {
+// 		transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
+// 		tx.TransactionID = transactionID
 
-		TransactionMu.Lock()
-		transactionStatus[transactionID] = "pending"
-		TransactionPool[transactionID] = &tx
-		TransactionMu.Unlock()
+// 		TransactionMu.Lock()
+// 		transactionStatus[transactionID] = "pending"
+// 		TransactionPool[transactionID] = &tx
+// 		TransactionMu.Unlock()
 
-		transactionIDs = append(transactionIDs, transactionID)
-		isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
-		// Process transaction asynchronously
-		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
-	}
-	c.JSON(http.StatusAccepted, gin.H{
-		"message":        "Transactions are being processed",
-		"transactionIDs": transactionIDs,
-	})
-}
+// 		transactionIDs = append(transactionIDs, transactionID)
+// 		isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
+// 		// Process transaction asynchronously
+// 		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
+// 	}
+// 	c.JSON(http.StatusAccepted, gin.H{
+// 		"message":        "Transactions are being processed",
+// 		"transactionIDs": transactionIDs,
+// 	})
+// }
+
 func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction
 
@@ -784,6 +783,7 @@ func shutdownAPIServer() error {
 
 // Main function
 func main() {
+
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -817,43 +817,6 @@ func main() {
 		log.Println("📦 Processing containers...")
 		processContainers(cli)
 	}
-
-	// Run Interactive CLI Execution in a separate goroutine
-	go func() {
-		for {
-			fmt.Println("\n📌 Blockchain Execution Options:")
-			fmt.Println("[1] Run Sharded Transactions")
-			fmt.Println("[2] Run Non-Sharded Transactions")
-			fmt.Println("[3] Run Stress Test")
-			fmt.Println("[4] Exit")
-			fmt.Print("> ")
-
-			var choice int
-			_, err := fmt.Scanln(&choice)
-			if err != nil {
-				fmt.Println("⚠️ Invalid input. Please enter a number (1-4).")
-				continue
-			}
-
-			switch choice {
-			case 1:
-				fmt.Println("⚡ Running Sharded Transactions...")
-
-				blockchain_test.ProcessSharded(10, 4)
-			case 2:
-				fmt.Println("📜 Running Non-Sharded Transactions...")
-				blockchain_test.ProcessNonSharded(10)
-			case 3:
-				fmt.Println("🚀 Running Blockchain Stress Test...")
-				blockchain_test.RunStressTest()
-			case 4:
-				fmt.Println("Exiting interactive mode...")
-				return
-			default:
-				fmt.Println("⚠️ Invalid choice. Please select a valid option.")
-			}
-		}
-	}()
 
 	// Wait for termination signal
 	<-quit
