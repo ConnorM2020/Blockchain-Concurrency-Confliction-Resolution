@@ -25,6 +25,7 @@ export default function SpiderWebView() {
   const [transactionData, setTransactionData] = useState("");
   const [sourceNode, setSourceNode] = useState(null);
   const [targetNode, setTargetNode] = useState([]);
+  
 
   const [transactionStatus, setTransactionStatus] = useState({});
   const [parallelModalOpen, setParallelModalOpen] = useState(false);
@@ -34,6 +35,7 @@ export default function SpiderWebView() {
   const [logsOpen, setLogsOpen] = useState(false);
   const [transactionLogs, setTransactionLogs] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
+  const [crossShardModalOpen, setCrossShardModalOpen] = useState(false);
 
   useEffect(() => {
     fetchBlockchain();
@@ -244,20 +246,25 @@ export default function SpiderWebView() {
               let assignedColor = shardColors[shardIndex % shardColors.length];
 
               newNodes.push({
-                  id: block.index.toString(),
-                  data: { label: `Block ${block.index}`, ...block },
-                  position: { x, y },
-                  style: {
-                      background: assignedColor.replace("0.3", "1"), // Solid for node
-                      color: "#fff",
-                      borderRadius: "5px",
-                      padding: "10px",
-                      cursor: "pointer",
-                      border: "none",
-                  },
-                  draggable: true,
+                id: block.index.toString(),
+                data: {
+                  label: `Block ${block.index}`,
+                  ...block,
+                  color: assignedColor.replace("0.3", "1"), //  Store the original color here
+                },
+                position: { x, y },
+                style: {
+                  background: assignedColor.replace("0.3", "1"),
+                  color: "#fff",
+                  borderRadius: "5px",
+                  padding: "10px",
+                  cursor: "pointer",
+                  border: "none",
+                },
+                draggable: true,
               });
-
+              
+              
               // Track bounding box
               minX = Math.min(minX, x);
               minY = Math.min(minY, y);
@@ -469,7 +476,7 @@ export default function SpiderWebView() {
       const response = await fetch(`${API_BASE}/assignNodesToShard`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shard_id: selectedShard, nodes: selectedNodes.map(Number) }),
+        body: JSON.stringify({ shard_id: selectedSharId, nodes: selectedNodes.map(Number) }),
       });
 
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
@@ -482,31 +489,7 @@ export default function SpiderWebView() {
       console.error("Error assigning nodes to shard:", err);
     }
   };
-  const handleCrossShardTransaction = async () => {
-    console.log("Executing Cross-Shard Transaction");
-  
-    if (!sourceNode || !targetNode.length) {
-      alert("Please select a source and target node.");
-      return;
-    }
-    try {
-      const response = await fetch("http://localhost:8080/crossShardTransaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: sourceNode, target: targetNode }),
-      });
-  
-      if (!response.ok) throw new Error(`Error: ${response.status}`);
-  
-      const data = await response.json();
-      console.log("Cross-Shard Transaction Response:", data);
-      alert(data.message || "Cross-Shard Transaction Completed");
-    } catch (error) {
-      console.error("Error executing cross-shard transaction:", error);
-      alert("Failed to execute cross-shard transaction. Please try again.");
-    }
-  };
-  
+
 
   const resetBlockchain = async () => {
     try {
@@ -527,18 +510,6 @@ export default function SpiderWebView() {
   return (
     <ReactFlowProvider>
       <div className="w-screen h-screen flex bg-black text-white">
-
-      {/* <ExecutionPanel
-        sourceNode={sourceNode}
-        targetNode={targetNode}
-        transactionData={transactionData}
-        setTransactionData={setTransactionData}
-        sendTransaction={sendTransaction}
-        sendParallelTransactions={sendParallelTransactions}
-        sendCrossShardTransaction={handleCrossShardTransaction}
-        transactionLogs={transactionLogs}
-      /> */}
-        
       {/* Sidebar Toggle Button */}
       <button
         className="absolute top-4 left-10 bg-blue-600 text-white px-4 py-2 rounded z-10"
@@ -562,8 +533,6 @@ export default function SpiderWebView() {
           <button className="w-full px-4 py-2 bg-green-600 text-white rounded" onClick={() => setParallelModalOpen(true)}>
             Parallel Transactions
           </button>
-
-        
 
           <button className="w-full px-4 py-2 bg-blue-600 text-white rounded" onClick={fetchBlockchain}>
             Refresh Blockchain
@@ -624,55 +593,6 @@ export default function SpiderWebView() {
           </div>
         )}
   
-        {/* Parallel Transactions Modal */}
-        {parallelModalOpen && (
-          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-xl font-bold mb-4 text-white">
-              Send <span className="text-blue-400">Parallel Transactions</span>
-            </h2>
-  
-            {parallelTransactions.map((tx, index) => (
-              <div key={index} className="mb-2">
-                <input
-                  type="number"
-                  placeholder="Source Node"
-                  value={tx.source}
-                  onChange={(e) => updateParallelTransaction(index, "source", e.target.value)}
-                  className="w-full p-2 mb-2 bg-gray-700 text-white rounded"
-                />
-                <input
-                  type="number"
-                  placeholder="Target Node"
-                  value={tx.target}
-                  onChange={(e) => updateParallelTransaction(index, "target", e.target.value)}
-                  className="w-full p-2 mb-2 bg-gray-700 text-white rounded"
-                />
-                <input
-                  type="text"
-                  placeholder="Transaction Data"
-                  value={tx.data}
-                  onChange={(e) => updateParallelTransaction(index, "data", e.target.value)}
-                  className="w-full p-2 bg-gray-700 text-white rounded"
-                />
-              </div>
-            ))}
-  
-            <div className="flex justify-between mt-4">
-              {/* Back Button */}
-              <button onClick={() => setParallelModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
-                Back
-              </button>
-              <button onClick={addNewParallelTransaction} className="px-4 py-2 bg-blue-500 text-white rounded">
-                + Add Transaction
-              </button>
-  
-              <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-500 text-white rounded">
-                Send Transactions
-              </button>
-            </div>
-          </div>
-        )}
-  
        {/* Shard Selection Modal */}
       {shardModalOpen && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
@@ -720,7 +640,19 @@ export default function SpiderWebView() {
           </div>
         </div>
       )}
+      
       </div>
+      <ExecutionPanel
+        sourceNode={sourceNode}
+        targetNode={targetNode}
+        setSourceNode={setSourceNode}
+        setTargetNode={setTargetNode}
+        setNodes={setNodes} 
+        transactionData={transactionData}
+        setTransactionData={setTransactionData}
+        sendTransaction={sendTransaction}
+        sendParallelTransactions={sendParallelTransactions}
+      />
     </ReactFlowProvider>
   );
 }  
