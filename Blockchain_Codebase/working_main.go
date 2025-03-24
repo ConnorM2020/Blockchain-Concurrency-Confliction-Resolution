@@ -1,7 +1,7 @@
 package main
 
 import (
-	"blockchain/blockchain_test"
+	//"blockchain/blockchain_test"
 	"context"
 	"flag"
 	"fmt"
@@ -73,54 +73,42 @@ func executeTransaction(c *gin.Context) {
 	var isSharded bool
 	var sourceBlock, targetBlock int
 
-	// Generate random source and target blocks (ensure they are different)
 	sourceBlock = rand.Intn(10) + 1
 	targetBlock = rand.Intn(10) + 1
-	for targetBlock == sourceBlock { // Ensure source != target
+	for targetBlock == sourceBlock {
 		targetBlock = rand.Intn(10) + 1
 	}
 
 	switch request.Option {
-	case 1: // Sharded Transactions
+	case 1:
 		log.Println("⚡ Running Sharded Transactions...")
 		isSharded = true
 		message = "Sharded Transactions Executed"
 
-		// Ensure source and target are in different shards
 		for getShardID(fmt.Sprintf("%d", sourceBlock)) == getShardID(fmt.Sprintf("%d", targetBlock)) {
 			targetBlock = rand.Intn(10) + 1
 		}
 
-	case 2: // Non-Sharded Transactions
+	case 2:
 		log.Println("📜 Running Non-Sharded Transactions...")
 		isSharded = false
 		message = "Non-Sharded Transactions Executed"
 
-		// Ensure source and target are in the same shard
 		sourceShard := getShardID(fmt.Sprintf("%d", sourceBlock))
 		for getShardID(fmt.Sprintf("%d", targetBlock)) != sourceShard {
 			targetBlock = rand.Intn(10) + 1
 		}
-
-	case 3: // Stress Test
-		log.Println("🚀 Running Blockchain Stress Test...")
-		blockchain_test.RunStressTest()
-		message = "Stress Test Executed"
-		isSharded = false // Assuming stress test is non-sharded
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid option selected"})
 		return
 	}
 
-	// Pass `isSharded` explicitly to `processTransaction`
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 	go processTransaction(transactionID, sourceBlock, targetBlock, "Transaction Data", isSharded)
 
-	// Compute execution time
 	executionTime := time.Since(startTime).Seconds()
 
-	// ✅ Return response with transaction type for debugging
 	c.JSON(http.StatusOK, gin.H{
 		"message":        message,
 		"execution_time": executionTime,
@@ -129,6 +117,8 @@ func executeTransaction(c *gin.Context) {
 		"is_sharded":     isSharded,
 	})
 }
+
+
 
 // Middleware to allow CORS
 func CORSMiddleware() gin.HandlerFunc {
@@ -528,69 +518,33 @@ func addTransactionHandler(c *gin.Context) {
 		SourceBlock int    `json:"source"`
 		TargetBlock int    `json:"target"`
 		Data        string `json:"data"`
+		IsSharded   bool   `json:"is_sharded"`
 	}
 
-	// Parse and validate request
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
 
-	// Generate a unique Transaction ID
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
-	// Store transaction as pending
 	TransactionMu.Lock()
 	transactionStatus[transactionID] = "pending"
 	TransactionMu.Unlock()
 
-	isSharded := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock)) != getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
+	isSharded := reqBody.IsSharded // ✅ Use the frontend’s instruction
 
-	// Process transaction asynchronously
 	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
-	fmt.Println("🔍 Transaction being added -> Source:", reqBody.SourceBlock, "Target:", reqBody.TargetBlock, "Sharded:", isSharded)
 
-	// Return response immediately
+	log.Printf("Transaction being added -> Source: %d | Target: %d | Sharded: %v", reqBody.SourceBlock, reqBody.TargetBlock, isSharded)
+
 	c.JSON(http.StatusAccepted, gin.H{
 		"message":       "Transaction submitted for processing",
 		"transactionID": transactionID,
 		"status":        "pending",
 	})
-
 }
 
-// // Add multiple transactions in parallel
-// func addParallelTransactions(c *gin.Context) {
-// 	var transactions []Transaction
-// 	if err := c.ShouldBindJSON(&transactions); err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
-// 		return
-// 	}
-
-// 	if len(transactions) == 0 {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "No transactions provided"})
-// 		return
-// 	}
-// 	var transactionIDs []string
-// 	for _, tx := range transactions {
-// 		transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
-// 		tx.TransactionID = transactionID
-
-// 		TransactionMu.Lock()
-// 		transactionStatus[transactionID] = "pending"
-// 		TransactionPool[transactionID] = &tx
-// 		TransactionMu.Unlock()
-
-// 		transactionIDs = append(transactionIDs, transactionID)
-// 		isSharded := getShardID(fmt.Sprintf("%d", tx.Source)) != getShardID(fmt.Sprintf("%d", tx.Target))
-// 		// Process transaction asynchronously
-// 		go processTransaction(transactionID, tx.Source, tx.Target, tx.Data, isSharded)
-// 	}
-// 	c.JSON(http.StatusAccepted, gin.H{
-// 		"message":        "Transactions are being processed",
-// 		"transactionIDs": transactionIDs,
-// 	})
-// }
 
 func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction

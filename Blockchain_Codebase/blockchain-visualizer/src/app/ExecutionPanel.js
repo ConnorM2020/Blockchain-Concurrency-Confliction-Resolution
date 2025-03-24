@@ -20,13 +20,6 @@ const ExecutionPanel = ({
   const [logsOpen, setLogsOpen] = useState(false);
   const [transactionType, setTransactionType] = useState("all");
   const [transactionLogs, setTransactionLogs] = useState([]); 
-  const [crossShardModalOpen, setCrossShardModalOpen] = useState(false);
-
-  // Detect if this is a cross-shard transaction
-  const isCrossShard =
-    sourceNode &&
-    targetNode.length > 0 &&
-    targetNode.some((target) => target?.data?.shard_id !== sourceNode?.data?.shard_id);
 
   const handleExecute = (type) => {
     setLoading(true);
@@ -51,83 +44,33 @@ const ExecutionPanel = ({
       });
   };
 
-  const handleTransactionSend = (type) => {
-    if (type === "sharded") {
-      sendParallelTransactions();
-    } else {
-      sendTransaction();
-    }
-  };
-  
 
-  const handleCrossShardTransaction = async () => {
-    console.log("sourceNode:", sourceNode);
-    console.log("targetNode:", targetNode);
-    console.log("Executing Cross-Shard Transaction");
   
-    if (!sourceNode || !targetNode.length) {
-      alert("Please select a source and target node.");
+const fetchTransactionLogs = async (type) => {
+  console.log(`Fetching logs for: ${type}`);
+  try {
+    const response = await fetch("http://localhost:8080/transactionLogs");
+    const data = await response.json();
+
+    if (!data.logs || !Array.isArray(data.logs)) {
+      console.error("Error: Invalid API response", data);
+      setTransactionLogs([]);
       return;
     }
-    setCrossShardModalOpen(true);
-  };
 
-  const submitCrossShardTransaction = async () => {
-    if (!transactionData.trim()) {
-      alert("Please enter transaction data.");
-      return;
-    }
-  
-    try {
-      const response = await fetch("http://localhost:8080/crossShardTransaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: sourceNode,
-          target: targetNode,
-          data: transactionData,
-        }),
-      });
-  
-      if (!response.ok) throw new Error(`Error: ${response.status}`);
-  
-      const data = await response.json();
-      console.log("Cross-Shard Transaction Response:", data);
-      alert(data.message || "Cross-Shard Transaction Completed");
-  
-      setCrossShardModalOpen(false);
-      setTransactionData("");
-      setSourceNode(null);
-      setTargetNode([]);
-      fetchTransactionLogs("sharded");      
+    const filteredLogs = type === "all"
+      ? data.logs
+      : data.logs.filter((log) => log.type.toLowerCase() === type);
 
-    } catch (error) {
-      console.error("Error executing cross-shard transaction:", error);
-      alert("Failed to execute cross-shard transaction.");
-    }
-  };
+    // Only show the 5 most recent logs
+    const sortedLogs = filteredLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const recentLogs = sortedLogs.slice(0, 5);
 
-  const fetchTransactionLogs = async (type) => {
-    console.log(`Fetching logs for: ${type}`);
-    try {
-      const response = await fetch("http://localhost:8080/transactionLogs");
-      const data = await response.json();
-
-      if (!data.logs || !Array.isArray(data.logs)) {
-        console.error("Error: Invalid API response", data);
-        setTransactionLogs([]);
-        return;
-      }
-
-      const filteredLogs = type === "all"
-        ? data.logs
-        : data.logs.filter((log) => log.type.toLowerCase() === type);
-
-       setTransactionLogs(filteredLogs);
-    } catch (error) {
-      console.error("Error fetching logs:", error);
-    }
-  };
+    setTransactionLogs(recentLogs);
+  } catch (error) {
+    console.error("Error fetching logs:", error);
+  }
+};
 
   return (
     <div className="execution-panel text-center mb-6">
@@ -149,13 +92,6 @@ const ExecutionPanel = ({
         >
           {loading ? "Processing..." : "Run Non-Sharded Transactions"}
         </button>
-
-        <button
-          onClick={handleCrossShardTransaction} 
-          className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg font-semibold"
-        >
-          Send Cross-Shard Transaction
-        </button>
       </div>
 
       {sourceNode && targetNode.length > 0 && (
@@ -175,22 +111,21 @@ const ExecutionPanel = ({
             placeholder="Enter transaction details..."
           />
           <div className="flex flex-wrap justify-between mt-4">
+        
           <button
-            onClick={() => handleTransactionSend("non-sharded")}
+            onClick={() => {sendTransaction("non-sharded"); }}
             className="px-4 py-2 bg-purple-600 text-white rounded"
-          > Send Non-Parallel Transaction
+          >Send Non-Sharded Transaction
           </button>
-          
+
           <button
-            onClick={() => handleTransactionSend("sharded")}
+            onClick={() => {
+              sendParallelTransactions();
+            }}
             className="px-4 py-2 bg-green-600 text-white rounded"
-          > Send Parallel Transaction
+          >Send Sharded Transaction
           </button>
-            {/* {isCrossShard && (
-              <button onClick={handleCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-black rounded">
-                Send Cross-Shard
-              </button>
-            )} */}
+
           </div>
           <button onClick={() => setTransactionData("")} className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4">
             Reset Selection
@@ -221,28 +156,6 @@ const ExecutionPanel = ({
           className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
         > Back
         </button>
-        </div>
-      )}
-
-      {crossShardModalOpen && (
-        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-          <h2 className="text-xl font-bold mb-4 text-white">
-            Send <span className="text-yellow-400">Cross-Shard Transaction</span>
-          </h2>
-          <textarea
-            className="w-full h-20 p-2 bg-gray-700 text-white rounded"
-            placeholder="Enter transaction data"
-            value={transactionData}
-            onChange={(e) => setTransactionData(e.target.value)}
-          />
-          <div className="flex justify-between mt-4">
-            <button onClick={() => setCrossShardModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
-              Cancel
-            </button>
-            <button onClick={submitCrossShardTransaction} className="px-4 py-2 bg-yellow-500 text-white rounded">
-              Submit
-            </button>
-          </div>
         </div>
       )}
 
