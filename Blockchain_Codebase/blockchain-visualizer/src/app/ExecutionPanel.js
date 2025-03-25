@@ -13,8 +13,6 @@ const ExecutionPanel = ({
   sendTransaction,
   sendParallelTransactions,
 }) => {
-
-
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
@@ -44,33 +42,30 @@ const ExecutionPanel = ({
       });
   };
 
+  const fetchTransactionLogs = async (type) => {
+    console.log(`Fetching logs for: ${type}`);
+    try {
+      const response = await fetch("http://localhost:8080/transactionLogs");
+      const data = await response.json();
 
-  
-const fetchTransactionLogs = async (type) => {
-  console.log(`Fetching logs for: ${type}`);
-  try {
-    const response = await fetch("http://localhost:8080/transactionLogs");
-    const data = await response.json();
+      if (!data.logs || !Array.isArray(data.logs)) {
+        console.error("Error: Invalid API response", data);
+        setTransactionLogs([]);
+        return;
+      }
 
-    if (!data.logs || !Array.isArray(data.logs)) {
-      console.error("Error: Invalid API response", data);
-      setTransactionLogs([]);
-      return;
+      const filteredLogs = type === "all"
+        ? data.logs
+        : data.logs.filter((log) => log.type.toLowerCase() === type);
+
+      const sortedLogs = filteredLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const recentLogs = sortedLogs.slice(0, 5);
+
+      setTransactionLogs(recentLogs);
+    } catch (error) {
+      console.error("Error fetching logs:", error);
     }
-
-    const filteredLogs = type === "all"
-      ? data.logs
-      : data.logs.filter((log) => log.type.toLowerCase() === type);
-
-    // Only show the 5 most recent logs
-    const sortedLogs = filteredLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    const recentLogs = sortedLogs.slice(0, 5);
-
-    setTransactionLogs(recentLogs);
-  } catch (error) {
-    console.error("Error fetching logs:", error);
-  }
-};
+  };
 
   return (
     <div className="execution-panel text-center mb-6">
@@ -111,51 +106,51 @@ const fetchTransactionLogs = async (type) => {
             placeholder="Enter transaction details..."
           />
           <div className="flex flex-wrap justify-between mt-4">
-        
-          <button
-            onClick={() => {sendTransaction("non-sharded"); }}
-            className="px-4 py-2 bg-purple-600 text-white rounded"
-          >Send Non-Sharded Transaction
-          </button>
+            <button
+              onClick={() => sendTransaction("non-sharded")}
+              className="px-4 py-2 bg-purple-600 text-white rounded"
+            >
+              Send Non-Sharded Transaction
+            </button>
 
-          <button
-            onClick={() => {
-              sendParallelTransactions();
-            }}
-            className="px-4 py-2 bg-green-600 text-white rounded"
-          >Send Sharded Transaction
-          </button>
-
+            <button
+              onClick={() => sendParallelTransactions()}
+              className="px-4 py-2 bg-green-600 text-white rounded"
+            >
+              Send Sharded Transaction
+            </button>
           </div>
-          <button onClick={() => setTransactionData("")} className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4">
+
+          <button
+            onClick={() => setTransactionData("")}
+            className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4"
+          >
             Reset Selection
           </button>
 
           <button
-          onClick={() => {
-            setSourceNode(null);
-            setTargetNode([]);
-            setTransactionData("");
-
-            // Reset only non-shardBubble nodes
-            setNodes((prevNodes) =>
-              prevNodes.map((node) => {
-                if (node.type === "shardBubble") return node;
-
-                return {
-                  ...node,
-                  style: {
-                    ...node.style,
-                    background: node.data?.color || "#444", // Restore background
-                    color: "#fff", // Ensure text stays white
-                  },
-                };
-              })
-            );
-          }}
-          className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
-        > Back
-        </button>
+            onClick={() => {
+              setSourceNode(null);
+              setTargetNode([]);
+              setTransactionData("");
+              setNodes((prevNodes) =>
+                prevNodes.map((node) => {
+                  if (node.type === "shardBubble") return node;
+                  return {
+                    ...node,
+                    style: {
+                      ...node.style,
+                      background: node.data?.color || "#444",
+                      color: "#fff",
+                    },
+                  };
+                })
+              );
+            }}
+            className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
+          >
+            Back
+          </button>
         </div>
       )}
 
@@ -203,6 +198,9 @@ const fetchTransactionLogs = async (type) => {
           </div>
         </div>
       </div>
+
+
+    {/* remove the Transactio Metrics from here */}
     </div>
   );
 };
