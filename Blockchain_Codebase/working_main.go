@@ -118,8 +118,6 @@ func executeTransaction(c *gin.Context) {
 	})
 }
 
-
-
 // Middleware to allow CORS
 func CORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -148,18 +146,18 @@ func init() {
 func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
 	startTime := time.Now()
 
-	//  Enforce correct sharding logic
-	if isSharded {
-		// Force different shards
-		for getShardID(fmt.Sprintf("%d", target)) == getShardID(fmt.Sprintf("%d", source)) {
-			target = rand.Intn(10) + 1
-		}
-	} else {
-		// Force same shard
-		for getShardID(fmt.Sprintf("%d", target)) != getShardID(fmt.Sprintf("%d", source)) {
-			target = rand.Intn(10) + 1
-		}
-	}
+	// Comment out
+	// if isSharded {
+	// 	// Force different shards
+	// 	for getShardID(fmt.Sprintf("%d", target)) == getShardID(fmt.Sprintf("%d", source)) {
+	// 		target = rand.Intn(10) + 1
+	// 	}
+	// } else {
+	// 	// Force same shard
+	// 	for getShardID(fmt.Sprintf("%d", target)) != getShardID(fmt.Sprintf("%d", source)) {
+	// 		target = rand.Intn(10) + 1
+	// 	}
+	// }
 
 	// Use the intended sharding type for labelling
 	typeLabel := map[bool]string{true: "Sharded", false: "Non-Sharded"}[isSharded]
@@ -544,7 +542,6 @@ func addTransactionHandler(c *gin.Context) {
 		"status":        "pending",
 	})
 }
-
 
 func addParallelTransactionsHandler(c *gin.Context) {
 	var transactions []Transaction

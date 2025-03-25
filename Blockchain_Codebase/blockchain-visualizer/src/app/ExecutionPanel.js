@@ -15,9 +15,9 @@ const ExecutionPanel = ({
 }) => {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [logsOpen, setLogsOpen] = useState(false);
+
   const [transactionType, setTransactionType] = useState("all");
-  const [transactionLogs, setTransactionLogs] = useState([]); 
+
 
   const handleExecute = (type) => {
     setLoading(true);
@@ -33,7 +33,6 @@ const ExecutionPanel = ({
       .then((data) => {
         console.log("Server response:", data);
         alert(data.message);
-        setTimeout(() => fetchTransactionLogs(type), 2000);
         setLoading(false);
       })
       .catch((error) => {
@@ -42,30 +41,6 @@ const ExecutionPanel = ({
       });
   };
 
-  const fetchTransactionLogs = async (type) => {
-    console.log(`Fetching logs for: ${type}`);
-    try {
-      const response = await fetch("http://localhost:8080/transactionLogs");
-      const data = await response.json();
-
-      if (!data.logs || !Array.isArray(data.logs)) {
-        console.error("Error: Invalid API response", data);
-        setTransactionLogs([]);
-        return;
-      }
-
-      const filteredLogs = type === "all"
-        ? data.logs
-        : data.logs.filter((log) => log.type.toLowerCase() === type);
-
-      const sortedLogs = filteredLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-      const recentLogs = sortedLogs.slice(0, 5);
-
-      setTransactionLogs(recentLogs);
-    } catch (error) {
-      console.error("Error fetching logs:", error);
-    }
-  };
 
   return (
     <div className="execution-panel text-center mb-6">
@@ -124,8 +99,7 @@ const ExecutionPanel = ({
           <button
             onClick={() => setTransactionData("")}
             className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4"
-          >
-            Reset Selection
+          > Reset Selection
           </button>
 
           <button
@@ -148,59 +122,11 @@ const ExecutionPanel = ({
               );
             }}
             className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
-          >
-            Back
+          > Back
           </button>
         </div>
       )}
-
-      <div className="mt-6">
-        <button
-          onClick={() => setLogsOpen(!logsOpen)}
-          className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg"
-        >
-          {logsOpen ? "▼ Hide Recent Transaction Logs" : "▲ Show Recent Transaction Logs"}
-        </button>
-
-        <div className={`overflow-hidden transition-all duration-500 ${logsOpen ? "max-h-96" : "max-h-0"}`}>
-          <div className="bg-gray-900 p-4 rounded-lg shadow-lg text-white overflow-y-auto max-h-96">
-            <h3 className="text-lg font-bold mb-2">Transaction Log</h3>
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="p-2">Tx ID</th>
-                  <th className="p-2">Source → Target</th>
-                  <th className="p-2">Type</th>
-                  <th className="p-2">Exec Time (ms)</th>
-                  <th className="p-2">Timestamp</th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactionLogs.length > 0 ? (
-                  transactionLogs.map((log, index) => (
-                    <tr key={index} className="border-b border-gray-700">
-                      <td className="p-2">{log.txID}</td>
-                      <td className="p-2">{log.source} → {log.target}</td>
-                      <td className={`p-2 ${log.type === "Sharded" ? "text-blue-400" : "text-red-400"}`}>
-                        {log.type}
-                      </td>
-                      <td className="p-2">{log.execTime ? log.execTime.toFixed(3) : "N/A"}</td>
-                      <td className="p-2">{new Date(log.timestamp).toLocaleString()}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="5" className="p-2 text-center text-gray-400">No transactions found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-
-    {/* remove the Transactio Metrics from here */}
+    
     </div>
   );
 };

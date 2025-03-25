@@ -45,38 +45,47 @@ export default function SpiderWebView() {
       return () => clearInterval(interval);
     }
   }, [pendingTransactions]);  
-  
+
+
   const fetchBlockchain = async () => {
     try {
       const response = await fetch(`${API_BASE}/blockchain`);
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
   
       const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn("⚠️ Blockchain data is empty or malformed. Skipping update.");
+        return; // Don't call formatSpiderWebData if data is invalid
+      }
+  
       formatSpiderWebData(data);
   
-      // Check transaction statuses
       for (const transactionID of pendingTransactions) {
         const status = await checkTransactionStatus(transactionID);
-  
         if (status === "completed") {
+          setTransactionStatus((prev) => ({ ...prev, [transactionID]: "Completed" }));
+  
           setNodes((prevNodes) =>
             prevNodes.map((node) =>
               node.id === sourceNode?.id
-                ? { ...node, style: { background: "blue" } } // Source node turns blue
+                ? { ...node, style: { background: "blue" } }
                 : targetNode.some((t) => t.id === node.id)
-                ? { ...node, style: { background: "lightgreen" } } // Target nodes turn light green
+                ? { ...node, style: { background: "lightgreen" } }
                 : node
             )
           );
-          // Reset selection
-          setSourceNode(null);
-          setTargetNode([]);
+  
+          // Reset node selections only after UI has updated
+          setTimeout(() => {
+            setSourceNode(null);
+            setTargetNode([]);
+          }, 1000);
         }
       }
     } catch (err) {
       console.error("Error fetching blockchain data:", err);
     }
-  };
+  };  
 
   const sendTransaction = async (type = "non-sharded") => {
     if (!sourceNode || !targetNode.length || !transactionData.trim()) {
@@ -458,66 +467,73 @@ export default function SpiderWebView() {
         return updatedTransactions;
     });
 };
-  // const addNewParallelTransaction = () => {
-  //   setParallelTransactions([...parallelTransactions, { source: "", target: "", data: "" }]);
-  // };
 
-  const sendParallelTransactions = async () => {
-    // Fallback to selected source/target if parallelTransactions is empty
-    const transactionsToSend = parallelTransactions.length > 0
-      ? parallelTransactions
-      : [{
-          source: sourceNode?.id,
-          target: targetNode.map(n => n.id),
-          data: transactionData.trim(),
-        }];
-  
-    // Filter out invalid
-    const validTransactions = transactionsToSend.filter(
-      tx => tx.source && tx.target.length > 0 && tx.data
-    );
-  
-    if (validTransactions.length === 0) {
-      alert("Please enter at least one transaction.");
-      return;
-    }
-  
-    try {
-      const formattedTransactions = validTransactions.map(tx => ({
-        source: Array.isArray(tx.source) ? tx.source : [Number(tx.source)],
-        target: tx.target.map(id => Number(id)),
-        data: tx.data.trim(),
-      }));
-  
-      const shardSize = 3;
-      const shards = [];
-      for (let i = 0; i < formattedTransactions.length; i += shardSize) {
-        shards.push(formattedTransactions.slice(i, i + shardSize));
-      }
-  
-      const promises = shards.map(shard =>
-        fetch("http://localhost:8080/shardTransactions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transactions: shard }),
-        }).then(res => res.json())
-      );
-  
-      const responses = await Promise.all(promises);
-      const transactionIDs = responses.flatMap(res => res.transactionIDs || []);
-  
-      setPendingTransactions(prev => [...prev, ...transactionIDs]);
-      setParallelTransactions([]);
-      setTransactionData("");
-      setSourceNode(null);
-      setTargetNode([]);
-      alert("✅ Sharded transaction(s) sent successfully!");
-    } catch (error) {
-      console.error("Error sending parallel transactions:", error);
-      alert("❌ Failed to send transaction(s).");
-    }
-  };
+const sendParallelTransactions = async () => {
+  const transactionsToSend = parallelTransactions.length > 0
+    ? parallelTransactions
+    : [{
+        source: sourceNode?.id,
+        target: targetNode.map(n => n.id),
+        data: transactionData.trim(),
+      }];
 
+  const validTransactions = transactionsToSend.filter(
+    tx => tx.source && tx.target.length > 0 && tx.data
+  );
+  // Prevent any self-transactions
+  const hasSelfTransaction = validTransactions.some(tx =>
+    tx.target.includes(Number(tx.source))
+  );
+  if (hasSelfTransaction) {
+    alert("❌ One or more transactions attempt to send to the same node (self-transaction). This is not allowed.");
+    return;
+  }
+  if (validTransactions.length === 0) {
+    alert("Please enter at least one transaction.");
+    return;
+  }
+
+  try {
+    const formattedTransactions = validTransactions.map(tx => ({
+      source: Array.isArray(tx.source) ? tx.source : [Number(tx.source)],
+      target: tx.target.map(id => Number(id)),
+      data: tx.data.trim(),
+    }));
+
+    const shardSize = 3;
+    const shards = [];
+    for (let i = 0; i < formattedTransactions.length; i += shardSize) {
+      shards.push(formattedTransactions.slice(i, i + shardSize));
+    }
+
+    const promises = shards.map((shard, index) => {
+      console.log(`🚀 Sending Sharded Transaction Group #${index + 1}:`);
+      shard.forEach(tx => {
+        console.log(`→ From Node ${tx.source} to Node(s) ${tx.target.join(", ")} | Data: "${tx.data}"`);
+      });
+
+      return fetch("http://localhost:8080/shardTransactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transactions: shard }),
+      }).then(res => res.json());
+    });
+
+    const responses = await Promise.all(promises);
+    const transactionIDs = responses.flatMap(res => res.transactionIDs || []);
+
+    setPendingTransactions(prev => [...prev, ...transactionIDs]);
+    setParallelTransactions([]);
+    setTransactionData("");
+    setSourceNode(null);
+    setTargetNode([]);
+    alert("✅ Sharded transaction(s) sent successfully!");
+    
+  } catch (error) {
+    console.error("Error sending parallel transactions:", error);
+    alert("❌ Failed to send transaction(s).");
+  }
+};
 
   // Define the custom node type
   const shardBubbleNode = ({ data }) => {
@@ -616,8 +632,10 @@ export default function SpiderWebView() {
           <button className="w-full px-4 py-2 bg-red-600 text-white rounded" onClick={resetBlockchain}>
             Reset Blockchain
           </button>
-          <button onClick={() => router.push("/transactions")} className="w-full px-4 py-2 bg-gray-700 text-white rounded mt-4">
-            View All Transactions
+          <button
+            onClick={() => router.push("/transactions")}
+            className="w-full px-6 py-3 bg-indigo-600 hover:bg-blue-700 text-white font-bold rounded-lg mt-6 shadow-md transition duration-200 ease-in-out"
+          > View All Transactions
           </button>
         </div>
 
