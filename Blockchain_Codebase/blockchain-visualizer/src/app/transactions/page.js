@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation"; // Correct router import for App Router
+import TransactionMetrics from "@/app/TransactionMetrics";
 
 const TransactionsPage = () => {
   const router = useRouter();
@@ -100,8 +101,15 @@ const TransactionsPage = () => {
           </tbody>
         </table>
       </div>
+        {/* 📊 Metrics Section */}
+        {transactions.length > 0 && (
+        <div className="mt-10">
+          <TransactionMetrics logs={transactions} />
+        </div>
+      )}
     </div>
   );
 };
 
 export default TransactionsPage;
+      
