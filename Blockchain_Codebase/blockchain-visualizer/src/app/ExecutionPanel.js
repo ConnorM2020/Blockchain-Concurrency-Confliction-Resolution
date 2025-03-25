@@ -164,7 +164,7 @@ const ExecutionPanel = ({
 
         <div className={`overflow-hidden transition-all duration-500 ${logsOpen ? "max-h-96" : "max-h-0"}`}>
           <div className="bg-gray-900 p-4 rounded-lg shadow-lg text-white overflow-y-auto max-h-96">
-            <h3 className="text-lg font-bold mb-2">📜 Transaction Log</h3>
+            <h3 className="text-lg font-bold mb-2">Transaction Log</h3>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-700">

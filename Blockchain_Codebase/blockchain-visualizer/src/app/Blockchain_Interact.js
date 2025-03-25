@@ -84,6 +84,7 @@ export default function SpiderWebView() {
       return;
     }
     const sourceShard = sourceNode?.data?.shard_id;
+  
     // Prevent transaction to self
     const selfTargets = targetNode.filter(
       (target) => target.id === sourceNode.id
@@ -92,7 +93,6 @@ export default function SpiderWebView() {
       alert("❌ Cannot send a transaction from a node to itself.");
       return;
     }
-  
     // Ensure all targets are in the same shard as the source
     const invalidTargets = targetNode.filter(
       (target) => target?.data?.shard_id !== sourceShard
@@ -102,63 +102,57 @@ export default function SpiderWebView() {
       const targetInfo = invalidTargets
         .map((t) => `${t.data?.label} (Shard ${t.data?.shard_id})`)
         .join(", ");
-      alert(
-        `❌ Invalid Non-Sharded Transaction:\nAll nodes must be in the SAME shard.\n` +
-        `Source is in Shard ${sourceShard}, but mismatched targets:\n${targetInfo}`
-      );
+      alert(`❌ Invalid Non-Sharded Transaction:\nAll nodes must be in the SAME shard.\n` +
+        `Source is in Shard ${sourceShard}, but mismatched targets:\n${targetInfo}` );
       return;
     }
-    const transactions = targetNode.map((target) => ({
-      source: Number(sourceNode.id),
-      target: Number(target.id),
-      data: transactionData,
-      is_sharded: type === "sharded",
-    }));
-  
-    const transaction = transactions[0]; // Send just one
   
     try {
-      console.log("📤 Sending non-sharded transaction:", transaction);
+      const responses = await Promise.all(
+        targetNode.map(async (target) => {
+          const transaction = {
+            source: Number(sourceNode.id),
+            target: Number(target.id),
+            data: transactionData,
+            is_sharded: type === "sharded",
+          };
   
-      const response = await fetch(`${API_BASE}/addTransaction`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(transaction),
-      });
+          console.log("Sending transaction:", transaction);
   
-      const responseText = await response.text();
-      if (!response.ok) {
-        console.error("❌ Backend responded:", responseText);
-        throw new Error(`HTTP Error: ${response.status}`);
-      }
+          const res = await fetch(`${API_BASE}/addTransaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(transaction),
+          });
   
-      const result = JSON.parse(responseText);
-      console.log("✅ Backend response:", result);
-
-      // Handle both singular and plural forms
-      if (Array.isArray(result.transactionIDs)) {
-        setPendingTransactions((prev) => [...prev, ...result.transactionIDs]);
-      } else if (result.transactionID) {
-        setPendingTransactions((prev) => [...prev, result.transactionID]);
+          const text = await res.text();
+          if (!res.ok) {
+            console.error("❌ Backend responded with error:", text);
+            throw new Error(`HTTP Error: ${res.status}`);
+          }
+          const parsed = JSON.parse(text);
+          return parsed.transactionID || null;
+        })
+      );
+  
+      const validTransactionIDs = responses.filter((id) => id);
+      if (validTransactionIDs.length > 0) {
+        setPendingTransactions((prev) => [...prev, ...validTransactionIDs]);
+        alert(`✅ ${validTransactionIDs.length} Non-Sharded transaction(s) sent!`);
       } else {
-        console.warn("⚠️ No transaction ID(s) found in response.");
+        alert("⚠️ No valid transactions were confirmed by the backend.");
       }
-
-
   
       setTransactionModalOpen(false);
       setSourceNode(null);
       setTargetNode([]);
-      alert("✅ Non-Sharded transaction successfully sent!");
-      alert(result.message || "Transaction submitted.");
-
+      setTransactionData("");
+  
     } catch (error) {
-      console.error("❌ Error sending transaction:", error.message);
-      alert("Transaction failed to send.");
+      console.error("❌ Error sending transaction(s):", error);
+      alert("Transaction(s) failed to send.");
     }
   };
-  
-
 
   const fetchTransactionLogs = async () => {
     try {
@@ -193,8 +187,6 @@ export default function SpiderWebView() {
     }
     setPendingTransactions(updatedPending);
   };
-
-  
   
   const checkTransactionStatus = async (transactionID) => {
     try {
@@ -271,7 +263,6 @@ export default function SpiderWebView() {
           }
           shardMap[block.shard_id].push(block);
       });
-
       let shardColors = [
           "rgba(255, 87, 51, 0.3)",  // Light red
           "rgba(51, 255, 87, 0.3)",  // Light green
@@ -433,8 +424,6 @@ export default function SpiderWebView() {
       }
     }
   };
-  
-
 
   const toggleNodeSelection = (nodeId) => {
     const numericNodeId = Number(nodeId); // Ensure nodeId is a number
@@ -469,11 +458,9 @@ export default function SpiderWebView() {
         return updatedTransactions;
     });
 };
-
-
-  const addNewParallelTransaction = () => {
-    setParallelTransactions([...parallelTransactions, { source: "", target: "", data: "" }]);
-  };
+  // const addNewParallelTransaction = () => {
+  //   setParallelTransactions([...parallelTransactions, { source: "", target: "", data: "" }]);
+  // };
 
   const sendParallelTransactions = async () => {
     // Fallback to selected source/target if parallelTransactions is empty
