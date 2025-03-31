@@ -13,10 +13,10 @@ type Shard struct {
 }
 
 // Initialize shards
-var shards []Shard // ✅ Use exported NumShards
+var shards []Shard // Use exported NumShards
 
 func initShards() {
-	shards = make([]Shard, NumShards) // ✅ Dynamically allocate slice size
+	shards = make([]Shard, NumShards) 
 	for i := 0; i < NumShards; i++ {
 		shards[i] = Shard{ID: i}
 	}
@@ -32,7 +32,7 @@ func distributeBlocksToShards() {
 	BlockchainMu.Lock() // ✅ Use the exported BlockchainMu
 	defer BlockchainMu.Unlock()
 
-	for i := range Blockchain { // ✅ Use the exported Blockchain
+	for i := range Blockchain { 
 		block := &Blockchain[i]
 		shardID := block.ShardID
 		if shardID >= NumShards || shardID < 0 {

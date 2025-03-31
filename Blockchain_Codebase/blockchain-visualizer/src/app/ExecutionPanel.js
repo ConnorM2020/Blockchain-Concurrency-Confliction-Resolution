@@ -91,17 +91,9 @@ const ExecutionPanel = ({
             <button
               onClick={() => sendParallelTransactions()}
               className="px-4 py-2 bg-green-600 text-white rounded"
-            >
-              Send Sharded Transaction
+            > Send Sharded Transaction
             </button>
           </div>
-
-          <button
-            onClick={() => setTransactionData("")}
-            className="w-full px-4 py-2 bg-gray-500 text-white rounded mt-4"
-          > Reset Selection
-          </button>
-
           <button
             onClick={() => {
               setSourceNode(null);

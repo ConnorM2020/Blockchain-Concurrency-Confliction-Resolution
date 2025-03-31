@@ -145,20 +145,6 @@ func init() {
 
 func processTransaction(transactionID string, source int, target int, data string, isSharded bool) {
 	startTime := time.Now()
-
-	// Comment out
-	// if isSharded {
-	// 	// Force different shards
-	// 	for getShardID(fmt.Sprintf("%d", target)) == getShardID(fmt.Sprintf("%d", source)) {
-	// 		target = rand.Intn(10) + 1
-	// 	}
-	// } else {
-	// 	// Force same shard
-	// 	for getShardID(fmt.Sprintf("%d", target)) != getShardID(fmt.Sprintf("%d", source)) {
-	// 		target = rand.Intn(10) + 1
-	// 	}
-	// }
-
 	// Use the intended sharding type for labelling
 	typeLabel := map[bool]string{true: "Sharded", false: "Non-Sharded"}[isSharded]
 
@@ -306,15 +292,14 @@ func runAPIServer(cli *client.Client) {
 
 	r.GET("/executionOptions", getExecutionOptions)
 	r.POST("/executeTransaction", executeTransaction)
-
 	r.POST("/resetBlockchain", resetBlockchainHandler)
+	r.POST("/deadlocksim", simulateDeadlockHandler)
+
 	r.POST("/addBlock", addBlockHandler)
 	r.POST("/createShard", createShardHandler)
 	r.POST("/addTransactionSegment", addTransactionSegmentHandler)
-
 	r.POST("/addTransaction", addTransactionHandler)               // Ensure this calls the correct handler
 	r.POST("/addShardedTransaction", addShardedTransactionHandler) // Use different endpoint
-
 	r.POST("/addParallelTransactions", addParallelTransactionsHandler)
 	r.POST("/assignNodesToShard", assignNodesToShardHandler)
 	r.POST("/shardTransactions", shardTransactionsHandler)
@@ -330,7 +315,7 @@ func runAPIServer(cli *client.Client) {
 	go func() {
 		log.Printf("🚀 Starting REST API server on port %s...", port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("❌ Error starting REST API server: %v", err)
+			log.Fatalf("Error starting REST API server: %v", err)
 		}
 	}()
 
@@ -339,11 +324,11 @@ func runAPIServer(cli *client.Client) {
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
 
-	log.Println("🛑 Shutting down REST API server...")
+	log.Println("Shutting down REST API server...")
 	if err := srv.Shutdown(context.Background()); err != nil {
-		log.Fatalf("❌ Error shutting down server: %v", err)
+		log.Fatalf("Error shutting down server: %v", err)
 	}
-	log.Println("✅ Server shutdown complete.")
+	log.Println("Server shutdown complete.")
 }
 
 // Root endpoint to list all available routes
@@ -363,6 +348,7 @@ func listRoutes(c *gin.Context) {
 			"/createShard",
 			"/addTransactionSegment",
 			"/addTransaction",
+			"/deadlocksim",
 			"/addParallelTransactions",
 			"/assignNodesToShard",
 			"/shardTransactions",
@@ -413,7 +399,7 @@ func addShardedTransactionHandler(c *gin.Context) {
 	// Process transaction asynchronously
 	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
 
-	log.Printf("🔍 Sharded Transaction being added -> Source: %d | Target: %d | Data: %s", reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
+	log.Printf("Sharded Transaction being added -> Source: %d | Target: %d | Data: %s", reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data)
 
 	// Return response immediately
 	c.JSON(http.StatusAccepted, gin.H{
@@ -714,7 +700,7 @@ func checkDockerConnection(cli *client.Client) bool {
 		log.Printf("⚠️ Docker connection failed: %v", err)
 		return false
 	}
-	log.Println("✅ Docker connection successful")
+	log.Println("Docker connection successful")
 	return true
 }
 
@@ -730,9 +716,107 @@ func shutdownAPIServer() error {
 	return srv.Shutdown(ctx)
 }
 
+// Simulate a deadlock with two non-sharded transactions (dynamically chosen)
+func simulateDeadlockHandler(c *gin.Context) {
+	var req struct {
+		Source int `json:"source"`
+		Target int `json:"target"`
+	}
+
+	// Bind JSON body
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request. Expected JSON body with 'source' and 'target' integers."})
+		return
+	}
+
+	if req.Source == req.Target {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target must be different blocks."})
+		return
+	}
+
+	var blockA, blockB *Block
+
+	// Find selected blocks from Blockchain
+	BlockchainMu.Lock()
+	for i := range Blockchain {
+		if Blockchain[i].Index == req.Source {
+			blockA = &Blockchain[i]
+		} else if Blockchain[i].Index == req.Target {
+			blockB = &Blockchain[i]
+		}
+	}
+	BlockchainMu.Unlock()
+
+	if blockA == nil || blockB == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Could not find both source and target blocks in the blockchain."})
+		return
+	}
+
+	// Create two interlocked pending transactions to simulate deadlock
+	startTime1 := time.Now()
+	startTime2 := startTime1.Add(2 * time.Second)
+
+	tx1 := Transaction{
+		TransactionID: fmt.Sprintf("deadlock-tx-%d", time.Now().UnixNano()),
+		Source:        blockA.Index,
+		Target:        blockB.Index,
+		Data:          "Deadlock Tx A→B",
+		Type:          "Non-Sharded",
+		Status:        "pending", // Never completed
+		Timestamp:     startTime1.Format(time.RFC3339),
+	}
+	tx2 := Transaction{
+		TransactionID: fmt.Sprintf("deadlock-tx-%d", time.Now().UnixNano()+1),
+		Source:        blockB.Index,
+		Target:        blockA.Index,
+		Data:          "Deadlock Tx B→A",
+		Type:          "Non-Sharded",
+		Status:        "pending",
+		Timestamp:     startTime2.Format(time.RFC3339),
+	}
+
+	// Store in global logs/status without marking completed
+	TransactionMu.Lock()
+	transactionStatus[tx1.TransactionID] = "pending"
+	transactionStatus[tx2.TransactionID] = "pending"
+
+	transactionLogs = append(transactionLogs,
+		TransactionLog{
+			TxID:      tx1.TransactionID,
+			Source:    tx1.Source,
+			Target:    tx1.Target,
+			Type:      tx1.Type,
+			ExecTime:  0,
+			Timestamp: tx1.Timestamp,
+		},
+		TransactionLog{
+			TxID:      tx2.TransactionID,
+			Source:    tx2.Source,
+			Target:    tx2.Target,
+			Type:      tx2.Type,
+			ExecTime:  0,
+			Timestamp: tx2.Timestamp,
+		},
+	)
+	TransactionMu.Unlock()
+
+	// Add pending transactions to respective blocks
+	BlockchainMu.Lock()
+	blockA.Transactions = append(blockA.Transactions, tx1)
+	blockB.Transactions = append(blockB.Transactions, tx2)
+	BlockchainMu.Unlock()
+
+	log.Printf("Deadlock simulation started between Block %d and Block %d", blockA.Index, blockB.Index)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Deadlock simulation started between selected nodes.",
+		"tx1":     tx1,
+		"tx2":     tx2,
+	})
+}
+
 // Main function
 func main() {
-
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

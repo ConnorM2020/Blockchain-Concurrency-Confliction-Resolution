@@ -25,17 +25,20 @@ export default function SpiderWebView() {
   const [transactionData, setTransactionData] = useState("");
   const [sourceNode, setSourceNode] = useState(null);
   const [targetNode, setTargetNode] = useState([]);
-  
 
   const [transactionStatus, setTransactionStatus] = useState({});
   const [parallelModalOpen, setParallelModalOpen] = useState(false);
   const [parallelTransactions, setParallelTransactions] = useState([]);
+  
   const [sidePanelOpen, setSidePanelOpen] = useState(false);
   const [logsDropdownOpen, setLogsDropdownOpen] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [transactionLogs, setTransactionLogs] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [crossShardModalOpen, setCrossShardModalOpen] = useState(false);
+  const [deadlockModalOpen, setDeadlockModalOpen] = useState(false);
+  const [deadlockSource, setDeadlockSource] = useState("");
+  const [deadlockTarget, setDeadlockTarget] = useState("");
 
   useEffect(() => {
     fetchBlockchain();
@@ -209,45 +212,6 @@ export default function SpiderWebView() {
       return "Unknown";
     }
   };
-  const sendShardedTransactions = async () => {
-    if (parallelTransactions.length === 0) {
-      alert("Please enter at least one transaction.");
-      return;
-    }
-  
-    try {
-      const formattedTransactions = parallelTransactions.map(tx => ({
-        source: tx.source.split(",").map(node => node.trim()), // Convert CSV to array
-        target: tx.target.split(",").map(node => node.trim()),
-        data: tx.data.trim(),
-      }));
-  
-      const shardSize = 3;
-      const shards = [];
-      for (let i = 0; i < formattedTransactions.length; i += shardSize) {
-        shards.push(formattedTransactions.slice(i, i + shardSize));
-      }
-  
-      // Send each shard in parallel
-      const promises = shards.map(shard =>
-        fetch(`${API_BASE}/shardTransactions`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ transactions: shard }),
-        }).then(response => response.json())
-          .then(data => updatePeerNodes(data.transactionIDs)) // Notify peers
-      );
-  
-      await Promise.all(promises);
-      alert("Transactions successfully sent and peers updated!");
-  
-      setParallelTransactions([]);
-      setParallelModalOpen(false);
-    } catch (error) {
-      console.error("Error sending sharded transactions:", error);
-    }
-  };
-  
   // Function to notify all peer nodes about the new transactions
   const updatePeerNodes = async (transactionIDs) => {
     try {
@@ -312,8 +276,7 @@ export default function SpiderWebView() {
                 },
                 draggable: true,
               });
-              
-              
+             
               // Track bounding box
               minX = Math.min(minX, x);
               minY = Math.min(minY, y);
@@ -330,7 +293,6 @@ export default function SpiderWebView() {
                   });
               }
           });
-
           // Create a bounding box for each shard
           let width = maxX - minX + 50;
           let height = maxY - minY + 50;
@@ -442,32 +404,43 @@ export default function SpiderWebView() {
         : [...prev, numericNodeId] // Add if not selected
     );
   };
-  
   const updateParallelTransaction = (index, field, value) => {
     setParallelTransactions((prev) => {
-        const updatedTransactions = [...prev];
-
-        // Validation range checking
-        if (field === "target" || field === "source") {
-            let nodeValue = Number(value);
-            const maxNodes = nodes.length; // Get total nodes count
-
-            // Ensure value is at least 1 and cycles if exceeding maxNodes
-            if (nodeValue < 1) {
-                nodeValue = 1;
-            } else if (nodeValue > maxNodes-1) {
-                nodeValue = 1; // Restart from 1 when exceeding available nodes
-            }
-
-            updatedTransactions[index] = { ...updatedTransactions[index], [field]: nodeValue };
-        } else {
-            updatedTransactions[index] = { ...updatedTransactions[index], [field]: value };
-        }
-
-        return updatedTransactions;
+      const updated = [...prev];
+      const maxNode = nodes.length - 1;
+  
+      if (field === "source") {
+        const safeVal = Math.min(maxNode, Math.max(0, Number(value)));
+        // remove from targets if it appears there
+        const existingTargets = updated[index]?.target || [];
+        const filtered = existingTargets.filter((id) => id !== safeVal);
+  
+        updated[index] = {
+          ...updated[index],
+          source: safeVal,
+          target: filtered,
+        };
+      } else if (field === "target") {
+        const source = Number(updated[index]?.source);
+        const validTargets = value
+          .map((v) => Number(v))
+          .filter(
+            (id, idx, arr) =>
+              id >= 0 && id <= maxNode && id !== source && arr.indexOf(id) === idx
+          );
+  
+        updated[index] = {
+          ...updated[index],
+          target: validTargets,
+        };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
+  
+      return updated;
     });
-};
-
+  };
+  
 const sendParallelTransactions = async () => {
   const transactionsToSend = parallelTransactions.length > 0
     ? parallelTransactions
@@ -562,7 +535,6 @@ const sendParallelTransactions = async () => {
       alert("Please select nodes to assign to a shard.");
       return;
     }
-  
     try {
       const response = await fetch(`${API_BASE}/assignNodesToShard`, {
         method: "POST",
@@ -580,8 +552,32 @@ const sendParallelTransactions = async () => {
       console.error("Error assigning nodes to shard:", err);
     }
   };
-  
 
+  const triggerDeadlock = async () => {
+    if (!deadlockSource || !deadlockTarget || deadlockSource === deadlockTarget) {
+      alert("Please select two distinct blocks.");
+      return;
+    }
+    try {
+      const res = await fetch("http://localhost:8080/deadlocksim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: parseInt(deadlockSource),
+          target: parseInt(deadlockTarget),
+        }),
+      });
+  
+      if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
+      const data = await res.json();
+      console.log("✅ Deadlock simulated:", data);
+      alert("Deadlock simulation started!");
+      setDeadlockModalOpen(false);
+    } catch (err) {
+      console.error("Error simulating deadlock:", err);
+      alert(" Failed to simulate deadlock.");
+    }
+  };
 
   const resetBlockchain = async () => {
     try {
@@ -592,7 +588,7 @@ const sendParallelTransactions = async () => {
   
       if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
   
-      console.log("✅ Blockchain reset successfully.");
+      console.log("Blockchain reset successfully.");
       fetchBlockchain(); // Refresh UI after reset
     } catch (err) {
       console.error("Error resetting blockchain:", err);
@@ -626,11 +622,15 @@ const sendParallelTransactions = async () => {
             Parallel Transactions
           </button>
 
+
           <button className="w-full px-4 py-2 bg-blue-600 text-white rounded" onClick={fetchBlockchain}>
             Refresh Blockchain
           </button>
           <button className="w-full px-4 py-2 bg-red-600 text-white rounded" onClick={resetBlockchain}>
             Reset Blockchain
+          </button>
+          <button className="w-full px-4 py-2 bg-yellow-500 text-white rounded" onClick={() => setDeadlockModalOpen(true)}>
+            Simulate Deadlock
           </button>
           <button
             onClick={() => router.push("/transactions")}
@@ -665,29 +665,61 @@ const sendParallelTransactions = async () => {
         </div>
       )}
         {/* Transaction Status Overlay */}
-        {Object.keys(transactionStatus || {}).length > 0 &&
-          Object.keys(transactionStatus).map((txID) => (
-            <div key={txID} className="absolute top-4 right-4 bg-gray-800 text-white px-4 py-2 rounded">
-              {txID}: {transactionStatus[txID]}
-            </div>
-          ))}
+        {Object.entries(transactionStatus || {}).map(([txID, status], idx) => (
+        <div
+          key={txID}
+          className={`absolute top-${4 + idx * 14} right-4 bg-gray-800 text-white px-4 py-2 rounded shadow-md transition-all ${
+            status === "pending" ? "border-2 border-red-500 animate-pulse" : "border border-green-500"
+          }`}
+        >
+          <span className="font-mono">{txID.slice(0, 14)}...</span>:{" "}
+          <span className="font-bold">
+            {status === "pending" ? "⏳ Deadlocked" : "Completed"}
+          </span>
+        </div>
+      ))}
   
-        {/* Transaction Modal */}
-        {transactionModalOpen && (
-          <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
-            <h2 className="text-xl font-bold mb-4">Send Transaction</h2>
-            <textarea
-              className="w-full h-20 p-2 bg-gray-700 text-white rounded"
-              value={transactionData}
-              onChange={(e) => setTransactionData(e.target.value)}
+      {/* Transaction Modal */}
+      {transactionModalOpen && (
+        <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
+          <h2 className="text-xl font-bold mb-4">Send Transaction</h2>
+          <textarea
+            className="w-full h-20 p-2 bg-gray-700 text-white rounded"
+            value={transactionData}
+            onChange={(e) => setTransactionData(e.target.value)}
             />
             <button onClick={sendTransaction} className="px-4 py-2 bg-green-600 text-white rounded mt-4">
-              Send
+            Send
             </button>
           </div>
         )}
-  
-       {/* Shard Selection Modal */}
+
+      {deadlockModalOpen && (
+      <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96 z-50">
+        <h2 className="text-xl font-bold mb-4 text-white">Deadlock Simulation</h2>
+        <label className="text-white">Select Source Block:</label>
+        <select value={deadlockSource} onChange={(e) => setDeadlockSource(e.target.value)} className="w-full mb-2 p-2 bg-gray-700 text-white rounded">
+          <option value="">-- Select Source --</option>
+          {nodes.filter(n => !n.data.label.includes("Shard")).map(n => (
+            <option key={n.id} value={n.id}>{n.data.label}</option>
+          ))}
+        </select>
+        <label className="text-white">Select Target Block:</label>
+        <select value={deadlockTarget} onChange={(e) => setDeadlockTarget(e.target.value)} className="w-full mb-4 p-2 bg-gray-700 text-white rounded">
+          <option value="">-- Select Target --</option>
+          {nodes.filter(n => !n.data.label.includes("Shard") && n.id !== deadlockSource).map(n => (
+            <option key={n.id} value={n.id}>{n.data.label}</option>
+          ))}
+        </select>
+        <div className="flex justify-between">
+          <button onClick={() => setDeadlockModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">Cancel</button>
+          <button onClick={triggerDeadlock} className="px-4 py-2 bg-green-600 text-white rounded">Trigger</button>
+        </div>
+      </div>
+    )}
+
+
+      {/* Shard Selection Modal */}
       {shardModalOpen && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
           <h2 className="text-xl font-bold mb-4">Assign Nodes to a Shard</h2>
@@ -727,14 +759,117 @@ const sendParallelTransactions = async () => {
             <button onClick={() => setShardModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded">
               Back
             </button>
-
             <button onClick={confirmShardCreation} className="px-4 py-2 bg-green-600 text-white rounded">
               Assign to Shard
             </button>
           </div>
         </div>
       )}
-      
+      {parallelModalOpen && (
+      <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-[500px] max-h-[80vh] overflow-y-auto z-50">
+        <h2 className="text-xl font-bold mb-4 text-white">Parallel Transactions</h2>
+
+        {parallelTransactions.map((tx, index) => (
+          <div key={index} className="mb-4">
+            <label className="block text-white mb-1">Transaction {index + 1}</label>
+
+            {/* Source Dropdown */}
+            <select
+              value={tx.source || ""}
+              onChange={(e) => updateParallelTransaction(index, "source", e.target.value)}
+              className="w-full mb-2 p-2 bg-gray-700 text-white rounded"
+            >
+              <option value="">Select Source Node</option>
+              {nodes
+                .filter((n) => !n.data.label.includes("Shard"))
+                .map((n) => (
+                  <option key={n.id} value={n.id}>
+                    {n.data.label}
+                  </option>
+                ))}
+            </select>
+           {/* Target Node Dropdowns */}
+            {(tx.target || []).map((targetID, tIndex) => (
+              <div key={tIndex} className="flex items-center mb-2 space-x-2">
+                <select
+                  value={targetID}
+                  onChange={(e) => {
+                    const newVal = Number(e.target.value);
+                    const updatedTargets = [...tx.target];
+                    updatedTargets[tIndex] = newVal;
+                    updateParallelTransaction(index, "target", updatedTargets);
+                  }}
+                  className="flex-1 p-2 bg-gray-700 text-white rounded"
+                >
+                  <option value="">Select Target Node</option>
+                  {nodes
+                    .filter((n) => {
+                      const id = Number(n.id);
+                      return (
+                        !n.data.label.includes("Shard") &&
+                        !isNaN(id) &&
+                        id !== Number(tx.source)
+                      );
+                    })
+                    .map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.data.label}
+                      </option>
+                    ))}
+                </select>
+                <button
+                  className="bg-red-600 text-white px-2 py-1 rounded"
+                  onClick={() => {
+                    const updatedTargets = tx.target.filter((_, i) => i !== tIndex);
+                    updateParallelTransaction(index, "target", updatedTargets);
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <button
+              className="px-2 py-1 bg-blue-600 text-white rounded mb-2"
+              onClick={() => {
+                // Prevent adding if at max already
+                if ((tx.target || []).length < nodes.length - 1) {
+                  updateParallelTransaction(index, "target", [...(tx.target || []), 0]);
+                }
+              }}
+            > + Add Target Node
+            </button>
+            
+            {/* Data Field */}
+            <textarea
+              placeholder="Transaction Data"
+              value={tx.data}
+              onChange={(e) => updateParallelTransaction(index, "data", e.target.value)}
+              className="w-full p-2 bg-gray-700 text-white rounded"
+            />
+          </div>
+        ))}
+
+        <div className="flex justify-between">
+          <button
+            onClick={() => setParallelTransactions((prev) => [...prev, { source: "", target: [], data: "" }])}
+            className="px-4 py-2 bg-blue-600 text-white rounded"
+          >
+            + Add Transaction
+          </button>
+          <div>
+            <button onClick={() => setParallelModalOpen(false)} className="px-4 py-2 bg-gray-500 text-white rounded mr-2">
+              Cancel
+            </button>
+            <button onClick={sendParallelTransactions} className="px-4 py-2 bg-green-600 text-white rounded">
+              Send
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+
       </div>
       {sourceNode && (
       <ExecutionPanel
