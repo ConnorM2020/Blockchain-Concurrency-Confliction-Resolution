@@ -25,14 +25,48 @@ vendor/
 bin/
 *.exe
 *.out
+*.test
+*.mod
+*.sum
 
 # Ignore Python cache and compiled files
 __pycache__/
 *.pyc
 *.pyo
 
+# Ignore Python virtual environments
+myenv/
+40295919/myenv/
+venv/
+env/
+ENV/
+lib/
+lib64/
+pyvenv.cfg
+
+
+# Ignore Node/React (frontend) dependencies and build output
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.env
+.env.local
+.next/
+dist/
+build/
+
 # Ignore IDE and editor files
 .vscode/
 .idea/
 *.log
 .DS_Store
+Thumbs.db
+
+# Ignore Hyperledger Fabric generated files
+wallet/
+keystore/
+crypto-config/
+*.block
+*.tx
+Blockchain_Codebase/serviceAccountKey.json
