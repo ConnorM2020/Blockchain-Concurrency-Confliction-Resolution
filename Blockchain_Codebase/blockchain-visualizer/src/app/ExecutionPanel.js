@@ -41,7 +41,6 @@ const ExecutionPanel = ({
       });
   };
 
-
   return (
     <div className="execution-panel text-center mb-6">
       <h2 className="text-xl font-bold text-white mb-4">🚀 Blockchain Execution Options</h2>
@@ -84,10 +83,8 @@ const ExecutionPanel = ({
             <button
               onClick={() => sendTransaction("non-sharded")}
               className="px-4 py-2 bg-purple-600 text-white rounded"
-            >
-              Send Non-Sharded Transaction
+            > Send Non-Sharded Transaction
             </button>
-
             <button
               onClick={() => sendParallelTransactions()}
               className="px-4 py-2 bg-green-600 text-white rounded"

@@ -90,81 +90,7 @@ export default function SpiderWebView() {
     }
   };  
 
-  const sendTransaction = async (type = "non-sharded") => {
-    if (!sourceNode || !targetNode.length || !transactionData.trim()) {
-      alert("Please select a source, at least one target, and enter data.");
-      return;
-    }
-    const sourceShard = sourceNode?.data?.shard_id;
-  
-    // Prevent transaction to self
-    const selfTargets = targetNode.filter(
-      (target) => target.id === sourceNode.id
-    );
-    if (selfTargets.length > 0) {
-      alert("❌ Cannot send a transaction from a node to itself.");
-      return;
-    }
-    // Ensure all targets are in the same shard as the source
-    const invalidTargets = targetNode.filter(
-      (target) => target?.data?.shard_id !== sourceShard
-    );
-  
-    if (invalidTargets.length > 0) {
-      const targetInfo = invalidTargets
-        .map((t) => `${t.data?.label} (Shard ${t.data?.shard_id})`)
-        .join(", ");
-      alert(`❌ Invalid Non-Sharded Transaction:\nAll nodes must be in the SAME shard.\n` +
-        `Source is in Shard ${sourceShard}, but mismatched targets:\n${targetInfo}` );
-      return;
-    }
-  
-    try {
-      const responses = await Promise.all(
-        targetNode.map(async (target) => {
-          const transaction = {
-            source: Number(sourceNode.id),
-            target: Number(target.id),
-            data: transactionData,
-            is_sharded: type === "sharded",
-          };
-  
-          console.log("Sending transaction:", transaction);
-  
-          const res = await fetch(`${API_BASE}/addTransaction`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(transaction),
-          });
-  
-          const text = await res.text();
-          if (!res.ok) {
-            console.error("❌ Backend responded with error:", text);
-            throw new Error(`HTTP Error: ${res.status}`);
-          }
-          const parsed = JSON.parse(text);
-          return parsed.transactionID || null;
-        })
-      );
-  
-      const validTransactionIDs = responses.filter((id) => id);
-      if (validTransactionIDs.length > 0) {
-        setPendingTransactions((prev) => [...prev, ...validTransactionIDs]);
-        alert(`✅ ${validTransactionIDs.length} Non-Sharded transaction(s) sent!`);
-      } else {
-        alert("⚠️ No valid transactions were confirmed by the backend.");
-      }
-  
-      setTransactionModalOpen(false);
-      setSourceNode(null);
-      setTargetNode([]);
-      setTransactionData("");
-  
-    } catch (error) {
-      console.error("❌ Error sending transaction(s):", error);
-      alert("Transaction(s) failed to send.");
-    }
-  };
+
 
   const fetchTransactionLogs = async () => {
     try {
@@ -404,44 +330,88 @@ export default function SpiderWebView() {
         : [...prev, numericNodeId] // Add if not selected
     );
   };
-  const updateParallelTransaction = (index, field, value) => {
-    setParallelTransactions((prev) => {
-      const updated = [...prev];
-      const maxNode = nodes.length - 1;
   
-      if (field === "source") {
-        const safeVal = Math.min(maxNode, Math.max(0, Number(value)));
-        // remove from targets if it appears there
-        const existingTargets = updated[index]?.target || [];
-        const filtered = existingTargets.filter((id) => id !== safeVal);
+/////////////////////////////////////////////////////////////////////////////
+  /* Send Non-Sharded 
+   * & 
+   * Non-sharded 
+   * transactions shown here */
+///////////////////////////////////////////////////////////////////////////////
+  const sendTransaction = async (type = "non-sharded") => {
+    if (!sourceNode || !targetNode.length || !transactionData.trim()) {
+      alert("Please select a source, at least one target, and enter data.");
+      return;
+    }
+    const sourceShard = sourceNode?.data?.shard_id;
   
-        updated[index] = {
-          ...updated[index],
-          source: safeVal,
-          target: filtered,
-        };
-      } else if (field === "target") {
-        const source = Number(updated[index]?.source);
-        const validTargets = value
-          .map((v) => Number(v))
-          .filter(
-            (id, idx, arr) =>
-              id >= 0 && id <= maxNode && id !== source && arr.indexOf(id) === idx
-          );
+    // Prevent transaction to self
+    const selfTargets = targetNode.filter(
+      (target) => target.id === sourceNode.id
+    );
+    if (selfTargets.length > 0) {
+      alert("❌ Cannot send a transaction from a node to itself.");
+      return;
+    }
+    // Ensure all targets are in the same shard as the source
+    const invalidTargets = targetNode.filter(
+      (target) => target?.data?.shard_id !== sourceShard
+    );
   
-        updated[index] = {
-          ...updated[index],
-          target: validTargets,
-        };
+    if (invalidTargets.length > 0) {
+      const targetInfo = invalidTargets
+        .map((t) => `${t.data?.label} (Shard ${t.data?.shard_id})`)
+        .join(", ");
+      alert(`❌ Invalid Non-Sharded Transaction:\nAll nodes must be in the SAME shard.\n` +
+        `Source is in Shard ${sourceShard}, but mismatched targets:\n${targetInfo}` );
+      return;
+    }
+    try {
+      const responses = await Promise.all(
+        targetNode.map(async (target) => {
+          const transaction = {
+            source: Number(sourceNode.id),
+            target: Number(target.id),
+            data: transactionData,
+            is_sharded: type === "sharded",
+          };
+  
+          console.log("Sending transaction:", transaction);
+  
+          const res = await fetch(`${API_BASE}/addTransaction`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(transaction),
+          });
+  
+          const text = await res.text();
+          if (!res.ok) {
+            console.error("Backend responded with error:", text);
+            throw new Error(`HTTP Error: ${res.status}`);
+          }
+          const parsed = JSON.parse(text);
+          return parsed.transactionID || null;
+        })
+      );
+      const validTransactionIDs = responses.filter((id) => id);
+      if (validTransactionIDs.length > 0) {
+        setPendingTransactions((prev) => [...prev, ...validTransactionIDs]);
+        alert(`${validTransactionIDs.length} Non-Sharded transaction(s) sent!`);
       } else {
-        updated[index] = { ...updated[index], [field]: value };
+        alert("⚠️ No valid transactions were confirmed by the backend.");
       }
   
-      return updated;
-    });
+      setTransactionModalOpen(false);
+      setSourceNode(null);
+      setTargetNode([]);
+      setTransactionData("");
+  
+    } catch (error) {
+      console.error("❌ Error sending transaction(s):", error);
+      alert("Transaction(s) failed to send.");
+    }
   };
   
-const sendParallelTransactions = async () => {
+  const sendParallelTransactions = async () => {
   const transactionsToSend = parallelTransactions.length > 0
     ? parallelTransactions
     : [{
@@ -465,7 +435,6 @@ const sendParallelTransactions = async () => {
     alert("Please enter at least one transaction.");
     return;
   }
-
   try {
     const formattedTransactions = validTransactions.map(tx => ({
       source: Array.isArray(tx.source) ? tx.source : [Number(tx.source)],
@@ -506,6 +475,42 @@ const sendParallelTransactions = async () => {
     console.error("Error sending parallel transactions:", error);
     alert("❌ Failed to send transaction(s).");
   }
+};
+
+const updateParallelTransaction = (index, field, value) => {
+  setParallelTransactions((prev) => {
+    const updated = [...prev];
+    const maxNode = nodes.length - 1;
+
+    if (field === "source") {
+      const safeVal = Math.min(maxNode, Math.max(0, Number(value)));
+      // remove from targets if it appears there
+      const existingTargets = updated[index]?.target || [];
+      const filtered = existingTargets.filter((id) => id !== safeVal);
+
+      updated[index] = {
+        ...updated[index],
+        source: safeVal,
+        target: filtered,
+      };
+    } else if (field === "target") {
+      const source = Number(updated[index]?.source);
+      const validTargets = value
+        .map((v) => Number(v))
+        .filter(
+          (id, idx, arr) =>
+            id >= 0 && id <= maxNode && id !== source && arr.indexOf(id) === idx
+        );
+      updated[index] = {
+        ...updated[index],
+        target: validTargets,
+      };
+    } else {
+      updated[index] = { ...updated[index], [field]: value };
+    }
+
+    return updated;
+  });
 };
 
   // Define the custom node type
@@ -868,7 +873,6 @@ const sendParallelTransactions = async () => {
         </div>
       </div>
     )}
-
 
       </div>
       {sourceNode && (

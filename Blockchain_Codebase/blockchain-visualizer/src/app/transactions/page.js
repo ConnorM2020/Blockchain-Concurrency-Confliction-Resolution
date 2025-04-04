@@ -54,7 +54,7 @@ const TransactionsPage = () => {
       </button>
 
       {/* Transaction Table */}
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto"> 
         <table className="w-full border-collapse border border-gray-700 text-sm">
           <thead>
             <tr className="border-b border-gray-700 bg-gray-800">
@@ -62,8 +62,7 @@ const TransactionsPage = () => {
               <th
                 className="p-2 cursor-pointer hover:text-blue-400"
                 onClick={() => sortTransactions("sourceTarget")}
-              >
-                Source → Target {sortConfig.key === "sourceTarget" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+              > Source → Target {sortConfig.key === "sourceTarget" && (sortConfig.direction === "asc" ? "↑" : "↓")}
               </th>
               <th
                 className="p-2 cursor-pointer hover:text-blue-400"
@@ -74,10 +73,10 @@ const TransactionsPage = () => {
               <th
                 className="p-2 cursor-pointer hover:text-blue-400"
                 onClick={() => sortTransactions("execTime")}
-              >
-                Exec Time (ms) {sortConfig.key === "execTime" && (sortConfig.direction === "asc" ? "↑" : "↓")}
+              > Exec Time (ms) {sortConfig.key === "execTime" && (sortConfig.direction === "asc" ? "↑" : "↓")}
               </th>
               <th className="p-2">Timestamp</th>
+              <th className="p-2">Message</th> 
             </tr>
           </thead>
           <tbody>
@@ -91,6 +90,7 @@ const TransactionsPage = () => {
                   </td>
                   <td className="p-2">{tx.execTime ? tx.execTime.toFixed(3) : "N/A"}</td>
                   <td className="p-2">{new Date(tx.timestamp).toLocaleString()}</td>
+                  <td className="p-2">{tx.message || "—"}</td> 
                 </tr>
               ))
             ) : (

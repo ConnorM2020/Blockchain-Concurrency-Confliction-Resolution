@@ -25,6 +25,7 @@ type TransactionLog struct {
 	TxID      string  `json:"txID"`
 	Source    int     `json:"source"`
 	Target    int     `json:"target"`
+	Message   string  `json:"message"` // ✅ renamed
 	Type      string  `json:"type"`
 	ExecTime  float64 `json:"execTime"`
 	Timestamp string  `json:"timestamp"`
@@ -193,12 +194,25 @@ func processTransaction(transactionID string, source int, target int, data strin
 		transactionStatus[transactionID] = "completed"
 		TransactionMu.Unlock()
 
+		// save to firebase context
+		SaveTransactionToFirestore(TransactionLog{
+			TxID:      transactionID,
+			Source:    source,
+			Target:    target,
+			Message:   data,
+			Type:      typeLabel,
+			ExecTime:  executionTime,
+			Timestamp: time.Now().Format(time.RFC3339),
+		})
+		
+
 		// Log to global transaction history
 		transactionLogsMu.Lock()
 		transactionLogs = append(transactionLogs, TransactionLog{
 			TxID:      transactionID,
 			Source:    source,
 			Target:    target,
+			Message:      data,
 			Type:      typeLabel,
 			ExecTime:  executionTime,
 			Timestamp: time.Now().Format(time.RFC3339),
@@ -817,6 +831,9 @@ func simulateDeadlockHandler(c *gin.Context) {
 
 // Main function
 func main() {
+	InitFirebase()	// initalise the firebase permanent storage
+	transactionLogs = LoadTransactionsFromFirestore()	// load existing system
+
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -860,5 +877,6 @@ func main() {
 	if err := shutdownAPIServer(); err != nil {
 		log.Fatalf("❌ Error shutting down server: %v", err)
 	}
+	defer firestoreClient.Close()	// gracefully close with app
 	log.Println("✅ Server shutdown complete.")
 }
