@@ -508,7 +508,7 @@ const updateParallelTransaction = (index, field, value) => {
     } else {
       updated[index] = { ...updated[index], [field]: value };
     }
-
+ t61a``
     return updated;
   });
 };

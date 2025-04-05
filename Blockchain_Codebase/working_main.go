@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"math"
 	"math/rand"
 	"net/http"
 	"os"
@@ -22,13 +23,16 @@ import (
 
 // Define TransactionLog structure
 type TransactionLog struct {
-	TxID      string  `json:"txID"`
-	Source    int     `json:"source"`
-	Target    int     `json:"target"`
-	Message   string  `json:"message"` // ✅ renamed
-	Type      string  `json:"type"`
-	ExecTime  float64 `json:"execTime"`
-	Timestamp string  `json:"timestamp"`
+	TxID        string  `json:"txID"`
+	Source      int     `json:"source"`
+	Target      int     `json:"target"`
+	Message     string  `json:"message"`
+	Type        string  `json:"type"`
+	ExecTime    float64 `json:"execTime"`
+	Finality    float64 `json:"finalityTime"`
+	Timestamp   string  `json:"timestamp"`
+	Propagation float64 `json:"propagationLatency"`
+	TPS         float64 `json:"tps"`
 }
 
 const (
@@ -39,19 +43,34 @@ const (
 )
 
 var (
-	transactionLogs   []TransactionLog
-	transactionLogsMu sync.Mutex
-	port              string
-
+	transactionLogs     []TransactionLog
+	transactionLogsMu   sync.Mutex
+	port                string
 	process             bool
 	server              bool
 	TransactionPool     = make(map[string]*Transaction)
 	transactionStatus   = make(map[string]string)
 	TransactionMu       sync.Mutex
 	transactionSegments = make(map[string][]TransactionSegment)
+
+	// Performance measurement benchmarks
+	txCount      int
+	txCountMutex sync.Mutex
+	currentTPS   float64
 )
 
 var executionOptions = []string{"Run Sharded Transactions", "Run Non-Sharded Transactions", "Run Stress Test"}
+
+// Monitors and calculates transactions per second (TPS)
+func monitorTPS() {
+	ticker := time.NewTicker(1 * time.Second)
+	for range ticker.C {
+		txCountMutex.Lock()
+		currentTPS = float64(txCount)
+		txCount = 0
+		txCountMutex.Unlock()
+	}
+}
 
 // return API handler
 func getExecutionOptions(c *gin.Context) {
@@ -109,6 +128,9 @@ func executeTransaction(c *gin.Context) {
 	go processTransaction(transactionID, sourceBlock, targetBlock, "Transaction Data", isSharded)
 
 	executionTime := time.Since(startTime).Seconds()
+	finalityTime := time.Since(startTime).Seconds() * 1000 // in ms
+
+	log.Printf("Finality time for %s: %.2f ms", transactionID, finalityTime)
 
 	c.JSON(http.StatusOK, gin.H{
 		"message":        message,
@@ -157,7 +179,6 @@ func processTransaction(transactionID string, source int, target int, data strin
 		} else {
 			time.Sleep(time.Duration(3+rand.Intn(4)) * time.Second)
 		}
-
 		BlockchainMu.Lock()
 		defer BlockchainMu.Unlock()
 
@@ -168,7 +189,6 @@ func processTransaction(transactionID string, source int, target int, data strin
 				break
 			}
 		}
-
 		if sourceBlock == nil {
 			log.Printf("❌ ERROR: Source block %d not found for transaction %s", source, transactionID)
 			TransactionMu.Lock()
@@ -177,7 +197,11 @@ func processTransaction(transactionID string, source int, target int, data strin
 			return
 		}
 
-		executionTime := time.Since(startTime).Seconds() * 1000 // Convert to ms
+		executionTime := time.Since(startTime).Seconds() * 1000 // in ms
+		finalityTime := executionTime
+		log.Printf("🕒 Finality time for %s: %.2f ms", transactionID, finalityTime)
+
+		propagationLatency := float64(10 + rand.Intn(50)) // e.g. 10–6
 
 		// Update block with transaction
 		TransactionMu.Lock()
@@ -189,34 +213,45 @@ func processTransaction(transactionID string, source int, target int, data strin
 			Status:        "completed",
 			Type:          typeLabel,
 			ExecTime:      executionTime,
-			Timestamp:     time.Now().Format(time.RFC3339),
+			Propagation:   propagationLatency,
+			//TPS: 			tps,
+			Timestamp: time.Now().Format(time.RFC3339),
 		})
 		transactionStatus[transactionID] = "completed"
 		TransactionMu.Unlock()
 
+		tps := 1000.0 / executionTime
+		tps = math.Round(tps*100) / 100 // Optional rounding
+
 		// save to firebase context
 		SaveTransactionToFirestore(TransactionLog{
-			TxID:      transactionID,
-			Source:    source,
-			Target:    target,
-			Message:   data,
-			Type:      typeLabel,
-			ExecTime:  executionTime,
-			Timestamp: time.Now().Format(time.RFC3339),
+			TxID:        transactionID,
+			Source:      source,
+			Target:      target,
+			Message:     data,
+			Type:        typeLabel,
+			ExecTime:    executionTime,
+			Finality:    finalityTime,
+			Propagation: propagationLatency,
+			Timestamp:   time.Now().Format(time.RFC3339),
+			TPS:         tps,
 		})
-		
 
-		// Log to global transaction history
 		transactionLogsMu.Lock()
+		// Log to global transaction history
 		transactionLogs = append(transactionLogs, TransactionLog{
-			TxID:      transactionID,
-			Source:    source,
-			Target:    target,
-			Message:      data,
-			Type:      typeLabel,
-			ExecTime:  executionTime,
-			Timestamp: time.Now().Format(time.RFC3339),
+			TxID:        transactionID,
+			Source:      source,
+			Target:      target,
+			Message:     data,
+			Type:        typeLabel,
+			ExecTime:    executionTime,
+			Finality:    finalityTime,
+			Propagation: propagationLatency,
+			Timestamp:   time.Now().Format(time.RFC3339),
+			TPS:         tps, // ✅ This was missing
 		})
+
 		transactionLogsMu.Unlock()
 
 		log.Printf("✅ Transaction %s completed: Block %d → Block %d (Type: %s | Exec Time: %.3f ms)",
@@ -318,6 +353,13 @@ func runAPIServer(cli *client.Client) {
 	r.POST("/assignNodesToShard", assignNodesToShardHandler)
 	r.POST("/shardTransactions", shardTransactionsHandler)
 	r.DELETE("/removeLastBlock", removeLastBlock)
+
+	// Performance measurements
+	r.GET("/metrics/tps", func(c *gin.Context) {
+		txCountMutex.Lock()
+		defer txCountMutex.Unlock()
+		c.JSON(http.StatusOK, gin.H{"tps": currentTPS})
+	})
 
 	// Start Server
 	srv := &http.Server{
@@ -831,9 +873,11 @@ func simulateDeadlockHandler(c *gin.Context) {
 
 // Main function
 func main() {
-	InitFirebase()	// initalise the firebase permanent storage
-	transactionLogs = LoadTransactionsFromFirestore()	// load existing system
+	InitFirebase()                                    // initalise the firebase permanent storage
+	transactionLogs = LoadTransactionsFromFirestore() // load existing system
 
+	// Start TPS monitoring in the background
+	go monitorTPS()
 	// Create Docker client
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
@@ -877,6 +921,6 @@ func main() {
 	if err := shutdownAPIServer(); err != nil {
 		log.Fatalf("❌ Error shutting down server: %v", err)
 	}
-	defer firestoreClient.Close()	// gracefully close with app
+	defer firestoreClient.Close() // gracefully close with app
 	log.Println("✅ Server shutdown complete.")
 }

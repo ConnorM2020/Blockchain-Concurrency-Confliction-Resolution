@@ -39,6 +39,8 @@ type Transaction struct {
 	Status        string  `json:"status"`
 	Type          string  `json:"type"`
 	ExecTime      float64 `json:"execTime"`
+	Finality      float64 `json:"finalityTime"`
+	Propagation   float64 `json:"propagationLatency"`
 }
 
 type ShardedTransaction struct {
