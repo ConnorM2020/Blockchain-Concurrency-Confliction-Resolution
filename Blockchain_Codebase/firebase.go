@@ -3,9 +3,10 @@ package main
 import (
 	"context"
 	"log"
-
+	"os"
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
+	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 )
 
@@ -13,7 +14,16 @@ var firestoreClient *firestore.Client
 
 func InitFirebase() {
 	ctx := context.Background()
-	opt := option.WithCredentialsFile("serviceAccountKey.json")
+
+	// Read credentials manually
+	credsPath := "/mnt/c/Users/cmall/Documents/MENG_CSC/Level_4/CSC4006_Project/concurrency-confliction/40295919/Blockchain_Codebase/serviceAccountKey.json"
+	credsJSON, err := os.ReadFile(credsPath)
+	if err != nil {
+		log.Fatalf("❌ Could not read service account key file: %v", err)
+	}
+
+	// Use the JSON directly
+	opt := option.WithCredentialsJSON(credsJSON)
 
 	app, err := firebase.NewApp(ctx, &firebase.Config{ProjectID: "csc4006-blockchain"}, opt)
 	if err != nil {
@@ -29,6 +39,7 @@ func InitFirebase() {
 	log.Println("📦 Firestore client ready")
 }
 
+
 func SaveTransactionToFirestore(tx TransactionLog) {
 	ctx := context.Background()
 
@@ -39,7 +50,10 @@ func SaveTransactionToFirestore(tx TransactionLog) {
 		"message":   tx.Message,
 		"type":      tx.Type,
 		"execTime":  tx.ExecTime,
+		"finality":  tx.Finality,
 		"timestamp": tx.Timestamp,
+		"propagationLatency": tx.Propagation,
+		"tps":       tx.TPS,
 	})
 
 	if err != nil {
@@ -48,29 +62,67 @@ func SaveTransactionToFirestore(tx TransactionLog) {
 		log.Println("✅ Transaction saved to Firestore")
 	}
 }
-
-// Load a specific sytem after finishing
 func LoadTransactionsFromFirestore() []TransactionLog {
 	ctx := context.Background()
 	var logs []TransactionLog
 
 	iter := firestoreClient.Collection("transactions").Documents(ctx)
+	defer iter.Stop()
+
 	for {
 		doc, err := iter.Next()
-		if err != nil {
+		if err == iterator.Done {
 			break
 		}
+		if err != nil {
+			log.Printf("❌ Error reading document: %v", err)
+			continue
+		}
 
-		var tx TransactionLog
 		data := doc.Data()
+		var tx TransactionLog
 
-		tx.TxID = data["txID"].(string)
-		tx.Source = int(data["source"].(int64)) // Firestore numbers are int64
-		tx.Target = int(data["target"].(int64))
-		tx.Message = data["message"].(string)
-		tx.Type = data["type"].(string)
-		tx.ExecTime = data["execTime"].(float64)
-		tx.Timestamp = data["timestamp"].(string)
+		if val, ok := data["txID"].(string); ok {
+			tx.TxID = val
+		} else {
+			continue
+		}
+
+		if val, ok := data["source"].(int64); ok {
+			tx.Source = int(val)
+		}
+
+		if val, ok := data["target"].(int64); ok {
+			tx.Target = int(val)
+		}
+
+		if val, ok := data["message"].(string); ok {
+			tx.Message = val
+		}
+
+		if val, ok := data["type"].(string); ok {
+			tx.Type = val
+		}
+
+		if val, ok := data["execTime"].(float64); ok {
+			tx.ExecTime = val
+		}
+
+		if val, ok := data["finality"].(float64); ok {
+			tx.Finality = val
+		}
+
+		if val, ok := data["propagationLatency"].(float64); ok {
+			tx.Propagation = val
+		}
+
+		if val, ok := data["tps"].(float64); ok {
+			tx.TPS = val
+		}
+
+		if val, ok := data["timestamp"].(string); ok {
+			tx.Timestamp = val
+		}
 
 		logs = append(logs, tx)
 	}
