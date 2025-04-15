@@ -40,7 +40,6 @@ const TransactionsPage = () => {
     setTransactions(sortedData);
     setSortConfig({ key, direction });
   };
-
   return (
     <div className="p-6 bg-black text-white min-h-screen">
       <h1 className="text-2xl font-bold mb-4">📜 All Transactions</h1>
@@ -82,7 +81,7 @@ const TransactionsPage = () => {
           <tbody>
             {transactions.length > 0 ? (
               transactions.map((tx, index) => (
-                <tr key={index} className="border-b border-gray-700">
+                <tr key={tx.txID} className="border-b border-gray-700">
                   <td className="p-2">{tx.txID}</td>
                   <td className="p-2">{tx.source} → {tx.target}</td>
                   <td className={`p-2 ${tx.type === "Sharded" ? "text-blue-400" : "text-red-400"}`}>
@@ -95,7 +94,9 @@ const TransactionsPage = () => {
               ))
             ) : (
               <tr>
-                <td colSpan="5" className="p-2 text-center text-gray-400">No transactions found</td>
+                <td colSpan="6" className="p-4 text-center text-gray-400 italic">
+                  No transactions recorded yet.
+                </td>
               </tr>
             )}
           </tbody>

@@ -421,8 +421,13 @@ export default function SpiderWebView() {
       }];
 
   const validTransactions = transactionsToSend.filter(
-    tx => tx.source && tx.target.length > 0 && tx.data
-  );
+      tx =>
+        tx.source !== null &&
+        tx.source !== undefined &&
+        tx.target.length > 0 &&
+        tx.data
+    );
+  
   // Prevent any self-transactions
   const hasSelfTransaction = validTransactions.some(tx =>
     tx.target.includes(Number(tx.source))
@@ -483,8 +488,10 @@ const updateParallelTransaction = (index, field, value) => {
     const maxNode = nodes.length - 1;
 
     if (field === "source") {
-      const safeVal = Math.min(maxNode, Math.max(0, Number(value)));
-      // remove from targets if it appears there
+      const parsedVal = Number(value);
+      if (isNaN(parsedVal)) return prev;  // prevent invalid selections
+      const safeVal = Math.min(maxNode, Math.max(0, parsedVal));
+    
       const existingTargets = updated[index]?.target || [];
       const filtered = existingTargets.filter((id) => id !== safeVal);
 
@@ -493,6 +500,7 @@ const updateParallelTransaction = (index, field, value) => {
         source: safeVal,
         target: filtered,
       };
+
     } else if (field === "target") {
       const source = Number(updated[index]?.source);
       const validTargets = value
@@ -508,7 +516,7 @@ const updateParallelTransaction = (index, field, value) => {
     } else {
       updated[index] = { ...updated[index], [field]: value };
     }
- t61a``
+
     return updated;
   });
 };
@@ -602,22 +610,25 @@ const updateParallelTransaction = (index, field, value) => {
   
   return (
     <ReactFlowProvider>
-      <div className="w-screen h-screen flex bg-black text-white">
+     <div className="w-screen h-screen overflow-hidden flex bg-black text-white">
       {/* Sidebar Toggle Button */}
-      <button
-        className="absolute top-4 left-10 bg-blue-600 text-white px-4 py-2 rounded z-10"
-        onClick={() => setSidePanelOpen(!sidePanelOpen)}
-        >
-        {sidePanelOpen ? "← Close Panel" : "→ Open Transactions"}
-        </button>
 
-        {/* Side Panel */}
-        <div
-          className={`absolute top-0 left-0 h-full bg-gray-800 p-6 shadow-lg transition-transform duration-300 ${
+      <div
+          className={`absolute top-0 left-0 h-full bg-gray-800 p-6 shadow-lg transition-transform duration-300 z-50 ${
             sidePanelOpen ? "translate-x-0" : "-translate-x-full"
           }`}
           style={{ width: "250px" }}
         >
+          {/* Toggle Button at the top of the panel */}
+          <div className="absolute top-4 right-[-42px] z-50">
+            <button
+              className="bg-blue-600 text-white px-2 py-2 rounded-r"
+              onClick={() => setSidePanelOpen(!sidePanelOpen)}
+            >
+              {sidePanelOpen ? "⟨" : "⟩"}
+            </button>
+          </div>
+
           <h2 className="text-lg font-bold mb-4 mt-12">Transaction Options</h2>
 
           <button className="w-full px-4 py-2 mb-2 bg-purple-600 text-white rounded" onClick={() => setShardModalOpen(true)}>
@@ -645,13 +656,13 @@ const updateParallelTransaction = (index, field, value) => {
         </div>
 
         {/* Main Content */}
-        <div className="w-full h-full relative mt-4">
-        <ReactFlowComponent nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={handleNodeClick} >
-            <MiniMap />
-            <Controls />
-            <Background />
-          </ReactFlowComponent>
-        </div>
+        <div className="w-full h-full relative overflow-hidden">
+          <ReactFlowComponent nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={handleNodeClick} >
+              <MiniMap />
+              <Controls />
+              <Background />
+            </ReactFlowComponent>
+          </div>
 
         {selectedNode && selectedNode.data && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
@@ -780,7 +791,7 @@ const updateParallelTransaction = (index, field, value) => {
 
             {/* Source Dropdown */}
             <select
-              value={tx.source || ""}
+              value={tx.source ?? ""}
               onChange={(e) => updateParallelTransaction(index, "source", e.target.value)}
               className="w-full mb-2 p-2 bg-gray-700 text-white rounded"
             >
@@ -793,6 +804,7 @@ const updateParallelTransaction = (index, field, value) => {
                   </option>
                 ))}
             </select>
+
            {/* Target Node Dropdowns */}
             {(tx.target || []).map((targetID, tIndex) => (
               <div key={tIndex} className="flex items-center mb-2 space-x-2">
@@ -828,8 +840,7 @@ const updateParallelTransaction = (index, field, value) => {
                     const updatedTargets = tx.target.filter((_, i) => i !== tIndex);
                     updateParallelTransaction(index, "target", updatedTargets);
                   }}
-                >
-                  ✕
+                > ✕
                 </button>
               </div>
             ))}
@@ -837,14 +848,27 @@ const updateParallelTransaction = (index, field, value) => {
             <button
               className="px-2 py-1 bg-blue-600 text-white rounded mb-2"
               onClick={() => {
-                // Prevent adding if at max already
                 if ((tx.target || []).length < nodes.length - 1) {
-                  updateParallelTransaction(index, "target", [...(tx.target || []), 0]);
+                  // Find the first available node that isn't the current source or already a target
+                  const usedTargets = new Set(tx.target || []);
+                  const validTargets = nodes
+                    .filter((n) =>
+                      !n.data.label.includes("Shard") &&
+                      Number(n.id) !== Number(tx.source) &&
+                      !usedTargets.has(Number(n.id))
+                    )
+                    .map((n) => Number(n.id));
+
+                  if (validTargets.length > 0) {
+                    updateParallelTransaction(index, "target", [...(tx.target || []), validTargets[0]]);
+                  } else {
+                    alert("⚠️ No more valid target nodes available.");
+                  }
                 }
               }}
             > + Add Target Node
             </button>
-            
+
             {/* Data Field */}
             <textarea
               placeholder="Transaction Data"

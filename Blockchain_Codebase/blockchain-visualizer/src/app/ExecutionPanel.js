@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 
 const ExecutionPanel = ({
   sourceNode,
@@ -13,11 +13,8 @@ const ExecutionPanel = ({
   sendTransaction,
   sendParallelTransactions,
 }) => {
-  const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(false);
-
   const [transactionType, setTransactionType] = useState("all");
-
 
   const handleExecute = (type) => {
     setLoading(true);
@@ -29,16 +26,40 @@ const ExecutionPanel = ({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ option: type === "sharded" ? 1 : 2 }),
     })
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Failed to execute transaction.");
+        }
+        return response.json();
+      })
       .then((data) => {
         console.log("Server response:", data);
         alert(data.message);
-        setLoading(false);
       })
       .catch((error) => {
         console.error("Error executing transaction:", error);
-        setLoading(false);
-      });
+        alert("An error occurred. Check console for details.");
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const handleResetNodes = () => {
+    setSourceNode(null);
+    setTargetNode([]);
+    setTransactionData("");
+    setNodes((prevNodes) =>
+      prevNodes.map((node) => {
+        if (node.type === "shardBubble") return node;
+        return {
+          ...node,
+          style: {
+            ...node.style,
+            background: node.data?.color || "#444",
+            color: "#fff",
+          },
+        };
+      })
+    );
   };
 
   return (
@@ -70,7 +91,7 @@ const ExecutionPanel = ({
             <strong>Source Node:</strong> {sourceNode?.data?.label}
           </p>
           <p className="text-white">
-            <strong>Target Nodes:</strong> {targetNode.map((t) => t.data.label).join(", ")}
+            <strong>Target Nodes:</strong> {targetNode.map((t) => t?.data?.label).join(", ")}
           </p>
 
           <textarea
@@ -79,43 +100,29 @@ const ExecutionPanel = ({
             onChange={(e) => setTransactionData(e.target.value)}
             placeholder="Enter transaction details..."
           />
+
           <div className="flex flex-wrap justify-between mt-4">
             <button
               onClick={() => sendTransaction("non-sharded")}
               className="px-4 py-2 bg-purple-600 text-white rounded"
-            > Send Non-Sharded Transaction
+            >
+              Send Non-Sharded Transaction
             </button>
             <button
-              onClick={() => sendParallelTransactions()}
+              onClick={sendParallelTransactions}
               className="px-4 py-2 bg-green-600 text-white rounded"
             > Send Sharded Transaction
             </button>
           </div>
+
           <button
-            onClick={() => {
-              setSourceNode(null);
-              setTargetNode([]);
-              setTransactionData("");
-              setNodes((prevNodes) =>
-                prevNodes.map((node) => {
-                  if (node.type === "shardBubble") return node;
-                  return {
-                    ...node,
-                    style: {
-                      ...node.style,
-                      background: node.data?.color || "#444",
-                      color: "#fff",
-                    },
-                  };
-                })
-              );
-            }}
+            onClick={handleResetNodes}
             className="w-full px-4 py-2 bg-red-600 text-white rounded mt-2"
-          > Back
+          >
+            Back
           </button>
         </div>
       )}
-    
     </div>
   );
 };
