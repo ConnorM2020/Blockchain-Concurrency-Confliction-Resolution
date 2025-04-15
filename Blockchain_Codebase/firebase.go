@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"log"
-
+	"time"
 	"cloud.google.com/go/firestore"
 	firebase "firebase.google.com/go/v4"
 	"google.golang.org/api/iterator"
@@ -31,7 +31,8 @@ func InitFirebase() {
 }
 
 func SaveTransactionToFirestore(tx TransactionLog) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
 
 	_, _, err := firestoreClient.Collection("transactions").Add(ctx, map[string]interface{}{
 		"txID":        tx.TxID,
@@ -58,9 +59,8 @@ func LoadTransactionsFromFirestore() []TransactionLog {
 	ctx := context.Background()
 	var logs []TransactionLog
 
-	// Directly read from the top-level transactions collection
-	iter := firestoreClient.Collection("transactions").Documents(ctx)
-
+	// Sort by Ascending Timestamp 
+	iter := firestoreClient.Collection("transactions").OrderBy("timestamp", firestore.Asc).Documents(ctx)
 	for {
 		doc, err := iter.Next()
 		if err == iterator.Done {
@@ -70,7 +70,6 @@ func LoadTransactionsFromFirestore() []TransactionLog {
 			log.Printf("❌ Error reading document: %v", err)
 			continue
 		}
-
 		data := doc.Data()
 		var tx TransactionLog
 
@@ -105,7 +104,6 @@ func LoadTransactionsFromFirestore() []TransactionLog {
 		if val, ok := data["propagation"].(float64); ok {
 			tx.Propagation = val
 		}
-
 		logs = append(logs, tx)
 	}
 
