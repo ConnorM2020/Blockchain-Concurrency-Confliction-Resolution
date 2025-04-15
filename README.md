@@ -1,82 +1,154 @@
-Blockchain Concurrency Confliction Resolution
+# Blockchain Concurrency Confliction Resolution
 
-Go-Based backend code, paired with a Python front-end
+An MEng Final Year Project - Blockchain platform for resolving concurrency conflicts using sharding and MVCC principles, with full visualisation, benchmarking, and persistent Firebase logging.
 
-> Project Overview
+---
 
-This project is a blockchain-based concurrency conflict resolution system designed to handle transaction conflicts efficiently.  
-It integrates a Go-based backend for high-performance blockchain processing and a JavaScript (react) based front-end for user interaction and visualisation.
+## Project Overview
 
-> Project Structure
+This project showcases a scalable, conflict-resilient blockchain system built with a Go-based backend and a React-based frontend. It supports:
 
-Blockchain-Concurrency-Confliction-Resolution/  
-│── Blockchain_Codebase/      # Go-based blockchain implementation  
-│── backup/                   # Backup of essential blockchain assets  
-│── chaincode/                 # Hyperledger Fabric smart contracts  
-│── fablo-target/              # Fablo-generated network artifacts  
-│── fabric-samples/            # Hyperledger Fabric sample configurations  
-│── GUI.py                     # Python GUI front-end  
-│── blockchain_visualisation.html  # HTML-based blockchain visualization  
-│── connection-profile.yaml     # Hyperledger Fabric network connection profile  
-│── fablo-config.json           # Configuration file for Fablo  
-│── go.mod                      # Go module dependencies  
-│── go.sum                      # Go module hash checksums  
-│── orderer-ca.crt              # Certificate for orderer node  
-│── org2-ca.crt                 # Certificate for Org2 peer node  
-└── README.md                   # Documentation (this file)  
+- Concurrent transaction execution
+- Sharding with MVCC conflict resolution
+- Interactive dashboard with ReactFlow
+- Firebase integration for persistent logging and recovery
+- Performance benchmarking: execution time, finality, propagation latency, TPS
 
-Features
+---
 
-✅ Blockchain Implementation: Utilizes Go to implement and manage blockchain transactions.  
-✅ Concurrency Resolution: Efficiently handles transaction conflicts using optimized algorithms.  
-✅ ReactFlow-Based Visualization: Provides an interactive blockchain visualization using ReactFlow.  
-✅ Hyperledger Fabric Integration: Uses chaincode for executing business logic on a private blockchain network.  
-✅ Python GUI: Simple GUI for managing and testing transactions.  
-✅ Backup & Recovery: Includes a backup mechanism to recover lost blockchain states.  
+## Why Use Sharding?
 
-> **Installation & Setup**
+> **Scalability**: Transactions execute in parallel across shards.  
+> **Performance**: Lower average execution time for sharded workloads.  
+> **Conflict Isolation**: Sharding reduces concurrency bottlenecks.
 
-🔹 Prerequisites
-Ensure you have the following installed on your system:
+---
 
-Go (>=1.23.2)
+##  Project Structure
 
-Node.js & npm (for front-end)
+```
+Blockchain-Concurrency-Confliction-Resolution/
+├── Blockchain_Codebase/         # Go-based blockchain logic
+│   ├── firebase.go              # Firebase integration
+│   ├── block.go                 # Core blockchain types & logic
+│   ├── working_main.go         # Main server logic
+│   ├── sharding.go             # Shard creation and mapping
+│   └── blockchain-visualizer/  # ReactFlow UI frontend
+├── chaincode/                  # Fabric chaincode (smart contracts)
+├── fabric-samples/             # Hyperledger Fabric network setup
+├── fablo-target/               # Artifacts for Docker-based Fabric startup
+├── backup/                     # Historical copies and recovery
+├── README.md                   # This file
+```
 
-Python (for GUI interaction)
+---
 
-Docker & Fabric Tools (for Hyperledger Fabric)
+##  Transaction Metrics (Visualised)
 
-WSL2 (if running on Windows)
-🔹 Cloning the Repository
+The system logs each transaction with detailed metrics:
 
+| Metric               | Description                                             |
+|---------------------|---------------------------------------------------------|
+| `txID`              | Unique transaction identifier                          |
+| `source → target`   | Block-to-block routing                                 |
+| `type`              | `Sharded` or `Non-Sharded`                             |
+| `execTime` (ms)     | Time to execute the transaction                        |
+| `finality` (ms)     | Time from submission to full confirmation              |
+| `propagation` (ms)  | Network latency between blocks                         |
+| `TPS`               | Transactions per second at the time of submission      |
+| `timestamp`         | Time of submission                                     |
+
+---
+
+## 📊 Visual Dashboard
+
+Transactions are pulled directly from **Firebase Firestore** and shown in ascending timestamp order:
+
+### All Transactions View
+
+![All Transactions Table](./images/transactions-table.png)
+
+### 📈 Performance Metrics:
+
+## 🔀 Sharding Architecture Example
+![Sharding Visual Example](./Blockchain_Codebase/.images/ShardingExample.png)
+
+### 🕒 All Transactions Table
+![All Transactions Table](./Blockchain_Codebase/.images/transactions.png)
+
+### 📈 Graphical Execution Timings (Sharded vs Non-Sharded)
+![Graphical Execution Time](./Blockchain_Codebase/.images/AllTimings.png)
+
+### ⌛ Piechart & Execution Time / Finality Overview 
+![Finality/Propagation/TPS](./Blockchain_Codebase/.images/piechart.png)
+
+---
+
+## Firebase Integration
+
+All transaction logs are saved to Firestore (`transactions` collection), including performance details and timestamps for analytics. This enables persistence across system restarts and supports dashboard loading from historical data.
+
+Sample Firestore entry:
+```json
+{
+  "txID": "tx-17443889221333985170",
+  "source": 1,
+  "target": 2,
+  "type": "Sharded",
+  "execTime": 1000.744,
+  "finality": 1000.744,
+  "tps": 1.0,
+  "timestamp": "2025-04-05T22:40:22",
+  "message": "Transaction Data",
+  "propagation": 35
+}
+```
+
+---
+
+## Setup Instructions
+
+### Prerequisites
+- Go >= 1.23.2
+- Node.js + npm
+- Docker + Docker Compose (for Fabric)
+- Firebase Admin SDK JSON (ignored in Git)
+- WSL2 (if on Windows)
+
+### Cloning the Repo
+```bash
 git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution.git
-
 cd Blockchain-Concurrency-Confliction-Resolution
+```
 
-🔹 Running the Blockchain Network
-
+### Backend (Go)
+```bash
 cd Blockchain_Codebase
-./startFabric.sh   # Starts the Hyperledger Fabric network
+./startFabric.sh
+./blockchain_app --server -process
+```
 
-🔹 Running the Go Backend
-
-cd Blockchain_Codebase
-go run main.go
-
-🔹 Running the ReactFlow Front-End
-
+### Frontend (ReactFlow)
+```bash
 cd Blockchain_Codebase/blockchain-visualizer
 npm install
 npm run dev
+```
 
-> **Contributors**
-ConnorM2020 
+---
 
-License
+## Contributors
+- ConnorM2020  (📌 Main Developer, UI + Backend)
 
-This project is licensed under the MIT License. Feel free to modify and use it in your projects.
-Contact & Support
+---
 
-For issues and contributions, create a GitHub issue or reach out via: 
-GitHub: ConnorM2020
+## 📄 License
+This project is licensed under the **MIT License**. Feel free to adapt and reuse.
+
+## 📬 Contact
+- GitHub: [ConnorM2020](https://github.com/ConnorM2020)
+- Email: Available via GitHub Profile
+
+---
+
+
