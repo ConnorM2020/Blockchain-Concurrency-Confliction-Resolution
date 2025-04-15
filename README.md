@@ -64,10 +64,6 @@ The system logs each transaction with detailed metrics:
 
 Transactions are pulled directly from **Firebase Firestore** and shown in ascending timestamp order:
 
-### All Transactions View
-
-![All Transactions Table](./images/transactions-table.png)
-
 ### 📈 Performance Metrics:
 
 ## 🔀 Sharding Architecture Example
