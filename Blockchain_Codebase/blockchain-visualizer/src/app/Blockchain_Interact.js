@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from "react";
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+
 import ReactFlow, { MiniMap, Controls, Background, ReactFlowProvider, useEdgesState, useNodesState } from "reactflow";
 import "reactflow/dist/style.css";
 import dynamic from "next/dynamic";
@@ -39,7 +42,39 @@ export default function SpiderWebView() {
   const [deadlockModalOpen, setDeadlockModalOpen] = useState(false);
   const [deadlockSource, setDeadlockSource] = useState("");
   const [deadlockTarget, setDeadlockTarget] = useState("");
+  const [backendAvailable, setBackendAvailable] = useState("waiting");
 
+
+  useEffect(() => {
+    const healthCheckInterval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/blockchain`);
+        if (!res.ok) throw new Error("Unhealthy response");
+        const data = await res.json();
+  
+        if (!backendAvailable) {
+          // Prevent state updates during render
+          setTimeout(() => {
+            toast.success("✅ Backend reconnected!");
+            setBackendAvailable(true);
+            fetchBlockchain();
+          }, 0);
+        }
+      } catch (err) {
+        if (backendAvailable) {
+          setTimeout(() => {
+            toast.error("Backend unreachable. Please start backend command");
+            setBackendAvailable(false);
+          }, 0);
+        }
+        console.error("Health check failed:", err);
+      }
+    }, 5000);
+  
+    return () => clearInterval(healthCheckInterval);
+  }, [backendAvailable]);
+  
+  
   useEffect(() => {
     fetchBlockchain();
     fetchTransactionLogs();
@@ -609,6 +644,19 @@ const updateParallelTransaction = (index, field, value) => {
   };
   
   return (
+    <>
+      <ToastContainer
+        position="top-right"
+        autoClose={4000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+
     <ReactFlowProvider>
      <div className="w-screen h-screen overflow-hidden flex bg-black text-white">
       {/* Sidebar Toggle Button */}
@@ -630,6 +678,17 @@ const updateParallelTransaction = (index, field, value) => {
           </div>
 
           <h2 className="text-lg font-bold mb-4 mt-12">Transaction Options</h2>
+          <div className="flex items-center mb-4">
+          <div
+            className={`w-3 h-3 rounded-full mr-2 ${
+              backendAvailable ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+            }`}
+            title={backendAvailable ? "Backend OK" : "Backend Offline"}
+          />
+          <span className="text-sm text-gray-300">
+            {backendAvailable ? "Backend Connected" : "Waiting for Backend..."}
+          </span>
+        </div>
 
           <button className="w-full px-4 py-2 mb-2 bg-purple-600 text-white rounded" onClick={() => setShardModalOpen(true)}>
             Create New Shard
@@ -657,12 +716,24 @@ const updateParallelTransaction = (index, field, value) => {
 
         {/* Main Content */}
         <div className="w-full h-full relative overflow-hidden">
-          <ReactFlowComponent nodes={nodes} edges={edges} nodeTypes={nodeTypes} onNodeClick={handleNodeClick} >
-              <MiniMap />
-              <Controls />
-              <Background />
-            </ReactFlowComponent>
+        {backendAvailable ? (
+          <ReactFlowComponent
+            nodes={nodes}
+            edges={edges}
+            nodeTypes={nodeTypes}
+            onNodeClick={handleNodeClick}
+          >
+            <MiniMap />
+            <Controls />
+            <Background />
+          </ReactFlowComponent>
+        ) : (
+          <div className="flex items-center justify-center h-full text-gray-400 text-xl">
+            Waiting for backend...
           </div>
+        )}
+      </div>
+
 
         {selectedNode && selectedNode.data && (
         <div className="absolute top-1/3 left-1/2 transform -translate-x-1/2 bg-gray-800 p-6 rounded-lg shadow-lg w-96">
@@ -913,5 +984,9 @@ const updateParallelTransaction = (index, field, value) => {
       />
     )}
     </ReactFlowProvider>
+
+
+    </>
   );
+  
 }  

@@ -414,22 +414,6 @@ func listRoutes(c *gin.Context) {
 	})
 }
 
-// API to check transaction status
-func getTransactionStatus(c *gin.Context) {
-	transactionID := c.Param("transactionID")
-
-	transactionMu.Lock()
-	defer transactionMu.Unlock()
-
-	status, exists := transactionStatus[transactionID]
-	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Transaction not found"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"transaction_id": transactionID, "status": status})
-}
-
 func addShardedTransactionHandler(c *gin.Context) {
 	var reqBody struct {
 		SourceBlock int    `json:"source"`

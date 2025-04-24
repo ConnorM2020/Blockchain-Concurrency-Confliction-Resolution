@@ -11,9 +11,10 @@
   "dependencies": {
     "@shadcn/ui": "^0.0.4",
     "framer-motion": "^12.4.7",
-    "next": "15.1.7",
+    "next": "^15.3.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-toastify": "^11.0.5",
     "reactflow": "^11.11.4",
     "recharts": "^2.15.1",
     "tailwind-variants": "^0.3.1"
