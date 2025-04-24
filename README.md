@@ -64,22 +64,6 @@ The system logs each transaction with detailed metrics:
 
 Transactions are pulled directly from **Firebase Firestore** and shown in ascending timestamp order:
 
-### 📈 Performance Metrics:
-
-## 🔀 Sharding Architecture Example
-![Sharding Visual Example](./Blockchain_Codebase/.images/ShardingExample.png)
-
-### 🕒 All Transactions Table
-![All Transactions Table](./Blockchain_Codebase/.images/transactions.png)
-
-### 📈 Graphical Execution Timings (Sharded vs Non-Sharded)
-![Graphical Execution Time](./Blockchain_Codebase/.images/AllTimings.png)
-
-### ⌛ Piechart & Execution Time / Finality Overview 
-![Finality/Propagation/TPS](./Blockchain_Codebase/.images/piechart.png)
-
----
-
 ## Firebase Integration
 
 All transaction logs are saved to Firestore (`transactions` collection), including performance details and timestamps for analytics. This enables persistence across system restarts and supports dashboard loading from historical data.
@@ -99,7 +83,6 @@ Sample Firestore entry:
   "propagation": 35
 }
 ```
-
 ---
 
 ## Setup Instructions
@@ -113,7 +96,7 @@ Sample Firestore entry:
 
 ### Cloning the Repo
 ```bash
-git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution.git
+git clone https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -134,7 +117,7 @@ npm run dev
 ---
 
 ## Contributors
-- ConnorM2020  (📌 Main Developer, UI + Backend)
+- 40295919  (📌 Main Developer, UI + Backend)
 
 ---
 
