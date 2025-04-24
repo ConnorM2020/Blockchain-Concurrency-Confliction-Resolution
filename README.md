@@ -113,7 +113,7 @@ Sample Firestore entry:
 
 ### Cloning the Repo
 ```bash
-git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution.git
+git clone https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
