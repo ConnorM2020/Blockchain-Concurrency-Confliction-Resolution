@@ -365,13 +365,9 @@ export default function SpiderWebView() {
         : [...prev, numericNodeId] // Add if not selected
     );
   };
-  
-/////////////////////////////////////////////////////////////////////////////
-  /* Send Non-Sharded 
-   * & 
-   * Non-sharded 
-   * transactions shown here */
-///////////////////////////////////////////////////////////////////////////////
+
+  // Send Transaction: non-sharded
+  // SendParrallelTransaction: Sharded 
   const sendTransaction = async (type = "non-sharded") => {
     if (!sourceNode || !targetNode.length || !transactionData.trim()) {
       alert("Please select a source, at least one target, and enter data.");
@@ -446,6 +442,9 @@ export default function SpiderWebView() {
     }
   };
   
+
+  // SendTransaction: non-sharded
+  // SendParrallelTransaction: Sharded 
   const sendParallelTransactions = async () => {
   const transactionsToSend = parallelTransactions.length > 0
     ? parallelTransactions
