@@ -133,6 +133,9 @@ This project is licensed under the **MIT License**. Feel free to adapt and reuse
 
 =======
 # csc4006-project
+=======
+# Csc4006 Project
+>>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 
 
 
@@ -149,14 +152,22 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
+<<<<<<< HEAD
 git remote add origin https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project.git
+=======
+git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
+>>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
+<<<<<<< HEAD
 - [ ] [Set up project integrations](https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
+=======
+- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
+>>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 
 ## Collaborate with your team
 
@@ -225,4 +236,7 @@ For open source projects, say how it is licensed.
 
 ## Project status
 If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+<<<<<<< HEAD
 >>>>>>> 0ba6a8c3167c503c5ba252fe804b97b65da2c599
+=======
+>>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
