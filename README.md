@@ -110,7 +110,7 @@ Sample Firestore entry:
 
 ### Cloning the Repo
 ```bash
-git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
+git clone https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -143,13 +143,6 @@ This project is licensed under the **MIT License**. Feel free to adapt and reuse
 - Email: Available via GitHub Profile
 
 ---
-
-
-=======
-# csc4006-project
-=======
-
-
 ## Getting started
 
 To make it easy for you to get started with GitLab, here's a list of recommended next steps.
@@ -245,9 +238,4 @@ Show your appreciation to those who have contributed to the project.
 ## License
 For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
-<<<<<<< HEAD
->>>>>>> 0ba6a8c3167c503c5ba252fe804b97b65da2c599
-=======
->>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
+
