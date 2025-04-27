@@ -116,6 +116,8 @@ cd Blockchain-Concurrency-Confliction-Resolution
 
 ### Cloning the GitLab Repo
 ```bash
+=======
+>>>>>>> feade78 (Update README.md)
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
@@ -163,6 +165,8 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
+=======
+>>>>>>> feade78 (Update README.md)
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
@@ -173,6 +177,8 @@ git push -uf origin main
 
 ## Integrate with your tools
 
+=======
+>>>>>>> feade78 (Update README.md)
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
