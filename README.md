@@ -84,23 +84,21 @@ Sample Firestore entry:
 }
 ```
 ## 📸 Visualizations
+
 ### Sharding Example
-![Sharding Example](.images/ShardingExample.png)
-
+![Sharding Example](Blockchain_Codebase/.images/ShardingExample.png)
 ---
-
 ### Transaction Timeline
-![Transactions](.images/transactions.png)
-
+![Transactions](Blockchain_Codebase/.images/transactions.png)
 ---
-
 ### Pie Chart - Sharded vs Non-Sharded
-![Pie Chart](.images/piechart.png)
+![Pie Chart](Blockchain_Codebase/.images/piechart.png)
 
 ---
 
 ### Timing Analysis
-![All Timings](.images/AllTimings.png)
+![All Timings](Blockchain_Codebase/.images/AllTimings.png)
+
 ## Setup Instructions
 
 ### Prerequisites
