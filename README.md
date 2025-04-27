@@ -110,7 +110,7 @@ Sample Firestore entry:
 
 ### Cloning the Repo
 ```bash
-git clone https://gitlab2.eeecs.qub.ac.uk/40295919/csc4006-project
+git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -148,9 +148,6 @@ This project is licensed under the **MIT License**. Feel free to adapt and reuse
 =======
 # csc4006-project
 =======
-# Csc4006 Project
->>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
-
 
 
 ## Getting started
