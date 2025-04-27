@@ -117,8 +117,9 @@ cd Blockchain-Concurrency-Confliction-Resolution
 ### Cloning the GitLab Repo
 ```bash
 =======
->>>>>>> feade78 (Update README.md)
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
+=======
+git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -166,11 +167,9 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 ```
 cd existing_repo
 =======
->>>>>>> feade78 (Update README.md)
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
->>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 git branch -M main
 git push -uf origin main
 ```
@@ -178,17 +177,16 @@ git push -uf origin main
 ## Integrate with your tools
 
 =======
->>>>>>> feade78 (Update README.md)
-- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
-=======
-- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
-
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 
->>>>>>> 60a0880 (Final upload)
+=======
+- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
+=======
+- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
+
 
 ## Collaborate with your team
 
@@ -212,16 +210,10 @@ Use the built-in continuous integration in GitLab.
 
 =======
 =======
->>>>>>> 0cdd2cf (Final working code)
->>>>>>> 0cdd2cf (Final working code)
 =======
->>>>>>> feade78 (Update README.md)
->>>>>>> b00edd4 (Update README.md)
 =======
->>>>>>> 5252a77 (Final working code)
 =======
->>>>>>> c047bad (Final upload)
->>>>>>> 60a0880 (Final upload)
+=======
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
