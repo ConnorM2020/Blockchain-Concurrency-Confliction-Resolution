@@ -108,19 +108,22 @@ Sample Firestore entry:
 - Firebase Admin SDK JSON (ignored in Git)
 - WSL2 (if on Windows)
 
-### Cloning the Repo
+### Cloning the GitHub Repo
 ```bash
-
 git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution
-=======
+cd Blockchain-Concurrency-Confliction-Resolution
+```
+
+### Cloning the GitLab Repo
+```bash
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
->>>>>>> feade78 (Update README.md)
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
 ### Backend (Go)
 ```bash
 cd Blockchain_Codebase
+go build -o blockchain_app
 ./startFabric.sh
 ./blockchain_app --server -process
 ```
@@ -160,7 +163,6 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-<<<<<<< HEAD
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
@@ -169,11 +171,8 @@ git branch -M main
 git push -uf origin main
 ```
 
-<<<<<<< HEAD
-=======
 ## Integrate with your tools
 
-<<<<<<< HEAD
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
@@ -199,7 +198,8 @@ Use the built-in continuous integration in GitLab.
 
 ***
 
->>>>>>> feade78 (Update README.md)
+=======
+>>>>>>> 0cdd2cf (Final working code)
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
