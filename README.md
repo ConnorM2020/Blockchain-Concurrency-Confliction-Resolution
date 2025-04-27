@@ -83,8 +83,24 @@ Sample Firestore entry:
   "propagation": 35
 }
 ```
+## 📸 Visualizations
+### Sharding Example
+![Sharding Example](.images/ShardingExample.png)
+
 ---
 
+### Transaction Timeline
+![Transactions](.images/transactions.png)
+
+---
+
+### Pie Chart - Sharded vs Non-Sharded
+![Pie Chart](.images/piechart.png)
+
+---
+
+### Timing Analysis
+![All Timings](.images/AllTimings.png)
 ## Setup Instructions
 
 ### Prerequisites
