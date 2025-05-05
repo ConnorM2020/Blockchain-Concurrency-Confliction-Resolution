@@ -164,7 +164,6 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 ```
 cd existing_repo
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
-=======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 git branch -M main
 git push -uf origin main
@@ -172,15 +171,13 @@ git push -uf origin main
 
 ## Integrate with your tools
 
-=======
-- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
-=======
+
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 
-=======
-=======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
-=======
+
+- [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
+
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 
 
@@ -204,7 +201,7 @@ Use the built-in continuous integration in GitLab.
 
 ***
 
-=======
+
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
