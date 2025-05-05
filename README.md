@@ -176,7 +176,7 @@ git push -uf origin main
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
->>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
+
 
 ## Collaborate with your team
 
@@ -199,7 +199,6 @@ Use the built-in continuous integration in GitLab.
 ***
 
 =======
->>>>>>> 0cdd2cf (Final working code)
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
