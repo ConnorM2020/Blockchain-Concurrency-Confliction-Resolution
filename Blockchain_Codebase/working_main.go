@@ -123,6 +123,7 @@ func executeTransaction(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid option selected"})
 		return
 	}
+	
 
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 	go processTransaction(transactionID, sourceBlock, targetBlock, "Transaction Data", isSharded)
@@ -427,6 +428,11 @@ func addShardedTransactionHandler(c *gin.Context) {
 		return
 	}
 	// Generate a unique Transaction ID
+	if reqBody.SourceBlock == reqBody.TargetBlock {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target block cannot be the same"})
+		return
+	}
+	
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
 	// Store transaction as pending
@@ -554,6 +560,7 @@ func addTransactionHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target block cannot be the same"})
 		return
 	}
+	
 
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
@@ -592,6 +599,11 @@ func addParallelTransactionsHandler(c *gin.Context) {
 	for _, tx := range transactions {
 		wg.Add(1)
 		go func(tx Transaction) {
+			if tx.Source == tx.Target {
+				log.Printf("❌ Skipping self-node transaction: %d → %d", tx.Source, tx.Target)
+				return
+			}
+			
 			defer wg.Done()
 
 			transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
@@ -645,6 +657,11 @@ func shardTransactionsHandler(c *gin.Context) {
 
 			for _, src := range txCopy.Source {
 				for _, tgt := range txCopy.Target {
+					if src == tgt {
+						log.Printf("❌ Skipping self-node sharded transaction: %d → %d", src, tgt)
+						continue
+					}
+					
 					transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
 					TransactionMu.Lock()
