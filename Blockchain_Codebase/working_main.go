@@ -549,6 +549,10 @@ func addTransactionHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid JSON body"})
 		return
 	}
+	if reqBody.SourceBlock == reqBody.TargetBlock {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target block cannot be the same"})
+		return
+	}
 
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
@@ -838,7 +842,7 @@ func simulateDeadlockHandler(c *gin.Context) {
 			Timestamp: tx2.Timestamp,
 		},
 	)
-	
+
 	TransactionMu.Unlock()
 
 	// Add pending transactions to respective blocks
