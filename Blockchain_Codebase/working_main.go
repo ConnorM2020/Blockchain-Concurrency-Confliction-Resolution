@@ -115,8 +115,24 @@ func executeTransaction(c *gin.Context) {
 		message = "Non-Sharded Transactions Executed"
 
 		sourceShard := getShardID(fmt.Sprintf("%d", sourceBlock))
-		for getShardID(fmt.Sprintf("%d", targetBlock)) != sourceShard {
-			targetBlock = rand.Intn(10) + 1
+		validTargets := []int{}
+
+		// Lock blockchain for safe read
+		BlockchainMu.Lock()
+		for _, blk := range Blockchain {
+			// Only consider blocks in the same shard that are not the source itself
+			if blk.Index != sourceBlock && getShardID(fmt.Sprintf("%d", blk.Index)) == sourceShard {
+				validTargets = append(validTargets, blk.Index)
+			}
+		}
+		BlockchainMu.Unlock()
+
+		if len(validTargets) == 0 {
+			log.Printf("⚠️ No valid intra-shard targets found for source Block %d (Shard %d). Defaulting to same block.", sourceBlock, sourceShard)
+			targetBlock = sourceBlock
+		} else {
+			targetBlock = validTargets[rand.Intn(len(validTargets))]
+			log.Printf("✅ Selected intra-shard target Block %d for source Block %d (Shard %d)", targetBlock, sourceBlock, sourceShard)
 		}
 
 	default:
@@ -560,9 +576,24 @@ func addTransactionHandler(c *gin.Context) {
 	transactionStatus[transactionID] = "pending"
 	TransactionMu.Unlock()
 
-	isSharded := reqBody.IsSharded // ✅ Use the frontend’s instruction
+	isSharded := reqBody.IsSharded
 
+	// Enforce intra-shard rule for non-sharded transactions
+	if !isSharded {
+		sourceShard := getShardID(fmt.Sprintf("%d", reqBody.SourceBlock))
+		targetShard := getShardID(fmt.Sprintf("%d", reqBody.TargetBlock))
+
+		if sourceShard != targetShard {
+			log.Printf("❌ Rejected non-sharded transaction: source Block %d (Shard %d), target Block %d (Shard %d)",
+				reqBody.SourceBlock, sourceShard, reqBody.TargetBlock, targetShard)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Non-sharded transactions must stay within the same shard."})
+			return
+		}
+	}
+
+	//  Now safe to process
 	go processTransaction(transactionID, reqBody.SourceBlock, reqBody.TargetBlock, reqBody.Data, isSharded)
+
 
 	log.Printf("Transaction being added -> Source: %d | Target: %d | Sharded: %v", reqBody.SourceBlock, reqBody.TargetBlock, isSharded)
 

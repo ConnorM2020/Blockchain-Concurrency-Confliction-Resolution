@@ -70,3 +70,4 @@ crypto-config/
 *.block
 *.tx
 Blockchain_Codebase/serviceAccountKey.json
+Blockchain_Codebase/blockchain_app
