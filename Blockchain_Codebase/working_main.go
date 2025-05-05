@@ -825,7 +825,7 @@ func simulateDeadlockHandler(c *gin.Context) {
 			TxID:      tx1.TransactionID,
 			Source:    tx1.Source,
 			Target:    tx1.Target,
-			Type:      tx1.Type,
+			Type:      "deadlock",
 			ExecTime:  0,
 			Timestamp: tx1.Timestamp,
 		},
@@ -833,11 +833,12 @@ func simulateDeadlockHandler(c *gin.Context) {
 			TxID:      tx2.TransactionID,
 			Source:    tx2.Source,
 			Target:    tx2.Target,
-			Type:      tx2.Type,
+			Type:      "deadlock",
 			ExecTime:  0,
 			Timestamp: tx2.Timestamp,
 		},
 	)
+	
 	TransactionMu.Unlock()
 
 	// Add pending transactions to respective blocks

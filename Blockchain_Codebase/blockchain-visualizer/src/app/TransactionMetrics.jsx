@@ -14,8 +14,18 @@ const TransactionMetrics = ({ logs }) => {
   const [showCombinedFinality, setShowCombinedFinality] = useState(false);
   const [showCombinedPropagation, setShowCombinedPropagation] = useState(false);
 
-  if (!logs || logs.length === 0) return null;
-  const tpsStats = logs.reduce((acc, log) => {
+  if (!logs || logs.length === 0) 
+    return null;
+  // Exclude deadlocks from metric calculations
+  const validLogs = logs.filter(
+    (log) =>
+      log.type?.toLowerCase() !== "deadlock" &&
+      log.execTime > 0 &&
+      log.tps > 0
+  );
+
+
+  const tpsStats = validLogs.reduce((acc, log) => {
     const type = log.type?.toLowerCase();
     if (type === "sharded") {
       acc.sharded.total += log.tps || 0;
@@ -31,25 +41,25 @@ const TransactionMetrics = ({ logs }) => {
   });
 
 
-  const combinedExecData = logs.map((log, i) => ({
+  const combinedExecData = validLogs.map((log, i) => ({
     name: `Tx ${i + 1}`,
     shardedExec: log.type?.toLowerCase() === "sharded" ? log.execTime : null,
     nonShardedExec: log.type?.toLowerCase() === "non-sharded" ? log.execTime : null,
   }));  
   
-  const combinedFinalityData = logs.map((log, i) => ({
+  const combinedFinalityData = validLogs.map((log, i) => ({
     name: `Tx ${i + 1}`,
     shardedFinality: log.type?.toLowerCase() === "sharded" ? log.finalityTime : null,
     nonShardedFinality: log.type?.toLowerCase() === "non-sharded" ? log.finalityTime : null,
   }));
   
-  const combinedPropagationData = logs.map((log, i) => ({
+  const combinedPropagationData = validLogs.map((log, i) => ({
     name: `Tx ${i + 1}`,
     shardedPropagation: log.type?.toLowerCase() === "sharded" ? log.propagationLatency : null,
     nonShardedPropagation: log.type?.toLowerCase() === "non-sharded" ? log.propagationLatency : null,
   }));
 
-  const combinedTPSData = logs.map((log, index) => ({
+  const combinedTPSData = validLogs.map((log, index) => ({
     name: `Tx ${index + 1}`,
     shardedTPS: log.type?.toLowerCase() === "sharded" ? log.tps : 0,
     nonShardedTPS: log.type?.toLowerCase() === "non-sharded" ? log.tps : 0,
@@ -59,7 +69,7 @@ const TransactionMetrics = ({ logs }) => {
   const avgNonShardedTPS = tpsStats.nonSharded.count ? (tpsStats.nonSharded.total / tpsStats.nonSharded.count).toFixed(2) : "N/A";
 
 
-  const typeCounts = logs.reduce((acc, log) => {
+  const typeCounts = validLogs.reduce((acc, log) => {
     const type = log.type?.toLowerCase();
     if (type) acc[type] = (acc[type] || 0) + 1;
     return acc;
@@ -98,7 +108,7 @@ const TransactionMetrics = ({ logs }) => {
     "non-sharded": { total: 0, count: 0 }
   });
 
-  const latencyStats = logs.reduce((acc, log) => {
+  const latencyStats = validLogs.reduce((acc, log) => {
     const type = log.type?.toLowerCase();
     if (type === "sharded") {
       acc.sharded.finality += log.finalityTime || 0;
