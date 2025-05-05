@@ -288,7 +288,7 @@ func processContainers(cli *client.Client) {
 
 	// Display Blockchain and Shard Distribution
 	displayBlockchain()
-	visualizeShards()
+	visualiseShards()
 }
 
 // Check transaction status

@@ -46,7 +46,7 @@ func distributeBlocksToShards() {
 }
 
 // Visualize shards and blocks
-func visualizeShards() {
+func visualiseShards() {
 	distributeBlocksToShards()
 
 	fmt.Println("\n🛠 Blockchain Sharding Visualization:")
