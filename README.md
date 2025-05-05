@@ -116,10 +116,7 @@ cd Blockchain-Concurrency-Confliction-Resolution
 
 ### Cloning the GitLab Repo
 ```bash
-=======
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
-=======
-git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -166,7 +163,6 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-=======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
@@ -177,11 +173,11 @@ git push -uf origin main
 ## Integrate with your tools
 
 =======
-=======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 
+=======
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
@@ -208,11 +204,6 @@ Use the built-in continuous integration in GitLab.
 
 ***
 
-=======
-=======
-=======
-=======
-=======
 =======
 # Editing this README
 
