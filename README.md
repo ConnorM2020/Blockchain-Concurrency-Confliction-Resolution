@@ -117,6 +117,7 @@ cd Blockchain-Concurrency-Confliction-Resolution
 ### Cloning the GitLab Repo
 ```bash
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
+=======
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -166,7 +167,6 @@ cd existing_repo
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
->>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 git branch -M main
 git push -uf origin main
 ```
@@ -199,6 +199,11 @@ Use the built-in continuous integration in GitLab.
 ***
 
 =======
+=======
+>>>>>>> 0cdd2cf (Final working code)
+=======
+>>>>>>> 0cdd2cf (Final working code)
+>>>>>>> fc64758 (Final working code)
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
