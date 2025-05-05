@@ -23,8 +23,6 @@ const TransactionMetrics = ({ logs }) => {
       log.execTime > 0 &&
       log.tps > 0
   );
-
-
   const tpsStats = validLogs.reduce((acc, log) => {
     const type = log.type?.toLowerCase();
     if (type === "sharded") {
@@ -175,7 +173,7 @@ const TransactionMetrics = ({ logs }) => {
         <ul className="list-disc list-inside space-y-1">
           <li><strong>Scalability:</strong> Transactions are processed in parallel across shards.</li>
           <li><strong>Performance:</strong> Lower average execution time when sharded logic is used.</li>
-          <li><strong>Conflict Isolation:</strong> Sharding makes concurrency conflicts more localized and manageable.</li>
+          <li><strong>Conflict Isolation:</strong> Sharding makes concurrency conflicts more localised and manageable.</li>
         </ul>
       </div>
 
