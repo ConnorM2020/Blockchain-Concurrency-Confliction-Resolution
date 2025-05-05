@@ -116,10 +116,7 @@ cd Blockchain-Concurrency-Confliction-Resolution
 
 ### Cloning the GitLab Repo
 ```bash
-=======
 git clone https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project
-=======
-git clone https://github.com/ConnorM2020/Blockchain-Concurrency-Confliction-Resolution
 cd Blockchain-Concurrency-Confliction-Resolution
 ```
 
@@ -166,20 +163,16 @@ Already a pro? Just edit this README.md and make it your own. Want to make it ea
 
 ```
 cd existing_repo
-=======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
 =======
 git remote add origin https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project.git
+>>>>>>> b229c76263cec0f2950aec8dd05bd27709ea302c
 git branch -M main
 git push -uf origin main
 ```
 
 ## Integrate with your tools
 
-=======
->>>>>>> feade78 (Update README.md)
-=======
->>>>>>> fbddc1e (Final working code)
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
 =======
 - [ ] [Set up project integrations](https://gitlab.eeecs.qub.ac.uk/40295919/csc4006-project/-/settings/integrations)
@@ -206,9 +199,6 @@ Use the built-in continuous integration in GitLab.
 ***
 
 =======
-=======
->>>>>>> 0cdd2cf (Final working code)
->>>>>>> fbddc1e (Final working code)
 # Editing this README
 
 When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
