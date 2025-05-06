@@ -89,10 +89,10 @@ func executeTransaction(c *gin.Context) {
 	startTime := time.Now()
 
 	var (
-		message      string
-		isSharded    bool
-		sourceBlock  int
-		targetBlock  int
+		message     string
+		isSharded   bool
+		sourceBlock int
+		targetBlock int
 	)
 
 	sourceBlock = rand.Intn(10) + 1
@@ -116,16 +116,20 @@ func executeTransaction(c *gin.Context) {
 		log.Println("📜 Running Non-Sharded Transactions...")
 		isSharded = false
 		message = "Non-Sharded Transactions Executed"
-
 		sourceShard := getShardID(fmt.Sprintf("%d", sourceBlock))
-		// Choose a target in the SAME shard and NOT equal to source
+
+		// Find a target block that is in the same shard and not the same as source
 		for {
 			targetBlock = rand.Intn(10) + 1
-			if targetBlock != sourceBlock &&
-				getShardID(fmt.Sprintf("%d", targetBlock)) == sourceShard {
+			targetShard := getShardID(fmt.Sprintf("%d", targetBlock))
+			if targetBlock != sourceBlock && targetShard == sourceShard {
 				break
 			}
 		}
+
+		// Optional log for clarity
+		log.Printf("✅ Non-Sharded Tx: Source Block %d [Shard %d] → Target Block %d [Shard %d]",
+			sourceBlock, sourceShard, targetBlock, getShardID(fmt.Sprintf("%d", targetBlock)))
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid option selected"})
@@ -148,7 +152,6 @@ func executeTransaction(c *gin.Context) {
 		"is_sharded":     isSharded,
 	})
 }
-
 
 // Middleware to allow CORS
 func CORSMiddleware() gin.HandlerFunc {
@@ -440,7 +443,7 @@ func addShardedTransactionHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target block cannot be the same"})
 		return
 	}
-	
+
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
 	// Store transaction as pending
@@ -568,7 +571,6 @@ func addTransactionHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Source and target block cannot be the same"})
 		return
 	}
-	
 
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
@@ -611,7 +613,7 @@ func addParallelTransactionsHandler(c *gin.Context) {
 				log.Printf("❌ Skipping self-node transaction: %d → %d", tx.Source, tx.Target)
 				return
 			}
-			
+
 			defer wg.Done()
 
 			transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
@@ -669,7 +671,7 @@ func shardTransactionsHandler(c *gin.Context) {
 						log.Printf("❌ Skipping self-node sharded transaction: %d → %d", src, tgt)
 						continue
 					}
-					
+
 					transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 
 					TransactionMu.Lock()
@@ -709,7 +711,7 @@ func shardTransactionsHandler(c *gin.Context) {
 
 func createShardHandler(c *gin.Context) {
 	var reqBody struct {
-		Nodes []int `json:"nodes"`
+		Nodes []int `json:"nodes"` // selected block indices
 	}
 
 	if err := c.ShouldBindJSON(&reqBody); err != nil {
@@ -717,16 +719,37 @@ func createShardHandler(c *gin.Context) {
 		return
 	}
 
-	for _, nodeID := range reqBody.Nodes {
-		for i := range Blockchain {
+	if len(reqBody.Nodes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "No nodes provided"})
+		return
+	}
+
+	// Step 1: Find the highest existing shard ID
+	highestShard := 0
+	for _, block := range Blockchain {
+		if block.ShardID > highestShard {
+			highestShard = block.ShardID
+		}
+	}
+	newShardID := highestShard + 1
+
+	// Step 2: Assign selected nodes to the new shard
+	for i := range Blockchain {
+		for _, nodeID := range reqBody.Nodes {
 			if Blockchain[i].Index == nodeID {
-				Blockchain[i].ShardID = len(Blockchain) // Assign new shard
+				Blockchain[i].ShardID = newShardID
 			}
 		}
 	}
-	log.Printf("✅ New shard created with nodes: %v", reqBody.Nodes)
-	c.JSON(http.StatusOK, gin.H{"message": "Shard created successfully"})
+
+	log.Printf("✅ Assigned nodes %v to NEW Shard %d", reqBody.Nodes, newShardID)
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Nodes assigned to new shard successfully",
+		"shard_id":  newShardID,
+		"node_ids":  reqBody.Nodes,
+	})
 }
+
 
 func resetBlockchainHandler(c *gin.Context) {
 	for i := range Blockchain {
