@@ -76,7 +76,6 @@ func monitorTPS() {
 func getExecutionOptions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"options": executionOptions})
 }
-
 func executeTransaction(c *gin.Context) {
 	var request struct {
 		Option int `json:"option"`
@@ -89,47 +88,55 @@ func executeTransaction(c *gin.Context) {
 
 	startTime := time.Now()
 
-	var message string
-	var isSharded bool
-	var sourceBlock, targetBlock int
+	var (
+		message      string
+		isSharded    bool
+		sourceBlock  int
+		targetBlock  int
+	)
 
 	sourceBlock = rand.Intn(10) + 1
-	targetBlock = rand.Intn(10) + 1
-	for targetBlock == sourceBlock {
-		targetBlock = rand.Intn(10) + 1
-	}
 
 	switch request.Option {
-	case 1:
+	case 1: // Sharded
 		log.Println("⚡ Running Sharded Transactions...")
 		isSharded = true
 		message = "Sharded Transactions Executed"
 
-		for getShardID(fmt.Sprintf("%d", sourceBlock)) == getShardID(fmt.Sprintf("%d", targetBlock)) {
+		// Choose a target in a DIFFERENT shard and NOT equal to source
+		for {
 			targetBlock = rand.Intn(10) + 1
+			if targetBlock != sourceBlock &&
+				getShardID(fmt.Sprintf("%d", sourceBlock)) != getShardID(fmt.Sprintf("%d", targetBlock)) {
+				break
+			}
 		}
 
-	case 2:
+	case 2: // Non-Sharded
 		log.Println("📜 Running Non-Sharded Transactions...")
 		isSharded = false
 		message = "Non-Sharded Transactions Executed"
 
 		sourceShard := getShardID(fmt.Sprintf("%d", sourceBlock))
-		for getShardID(fmt.Sprintf("%d", targetBlock)) != sourceShard {
+		// Choose a target in the SAME shard and NOT equal to source
+		for {
 			targetBlock = rand.Intn(10) + 1
+			if targetBlock != sourceBlock &&
+				getShardID(fmt.Sprintf("%d", targetBlock)) == sourceShard {
+				break
+			}
 		}
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid option selected"})
 		return
 	}
-	
 
 	transactionID := fmt.Sprintf("tx-%d", time.Now().UnixNano())
 	go processTransaction(transactionID, sourceBlock, targetBlock, "Transaction Data", isSharded)
 
 	executionTime := time.Since(startTime).Seconds()
-	finalityTime := time.Since(startTime).Seconds() * 1000 // in ms
+	finalityTime := executionTime * 1000 // in ms
 
 	log.Printf("Finality time for %s: %.2f ms", transactionID, finalityTime)
 
@@ -141,6 +148,7 @@ func executeTransaction(c *gin.Context) {
 		"is_sharded":     isSharded,
 	})
 }
+
 
 // Middleware to allow CORS
 func CORSMiddleware() gin.HandlerFunc {
