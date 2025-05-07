@@ -209,11 +209,26 @@ func processTransaction(transactionID string, source int, target int, data strin
 			return
 		}
 
-		executionTime := time.Since(startTime).Seconds() * 1000 // in ms
-		finalityTime := executionTime
-		log.Printf("🕒 Finality time for %s: %.2f ms", transactionID, finalityTime)
+		executionTime := time.Since(startTime).Seconds() * 1000 // ms
 
-		propagationLatency := float64(10 + rand.Intn(50)) // e.g. 10–6
+		// Simulate propagation delay based on shard distance
+		var propagationLatency float64
+		if isSharded {
+			propagationLatency = float64(10 + rand.Intn(15)) // Sharded: 10–25ms
+		} else {
+			propagationLatency = float64(40 + rand.Intn(30)) // Non-sharded: 40–70ms
+		}
+		
+
+		// Simulate consensus delay (e.g., 2–4 validators * 30ms)
+		consensusDelay := float64((2 + rand.Intn(3)) * 30) // 60–120 ms
+
+		// Finality = Execution + Consensus + Propagation
+		finalityTime := executionTime + consensusDelay + propagationLatency
+
+		log.Printf("🕒 Finality time for %s: %.2f ms (Exec: %.2f + Consensus: %.2f + Propagation: %.2f)",
+			transactionID, finalityTime, executionTime, consensusDelay, propagationLatency)
+
 
 		// Update block with transaction
 		TransactionMu.Lock()
@@ -744,12 +759,11 @@ func createShardHandler(c *gin.Context) {
 
 	log.Printf("✅ Assigned nodes %v to NEW Shard %d", reqBody.Nodes, newShardID)
 	c.JSON(http.StatusOK, gin.H{
-		"message":   "Nodes assigned to new shard successfully",
-		"shard_id":  newShardID,
-		"node_ids":  reqBody.Nodes,
+		"message":  "Nodes assigned to new shard successfully",
+		"shard_id": newShardID,
+		"node_ids": reqBody.Nodes,
 	})
 }
-
 
 func resetBlockchainHandler(c *gin.Context) {
 	for i := range Blockchain {
